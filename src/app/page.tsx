@@ -1,3 +1,5 @@
+import { ClientPage } from '@/components/client-page';
+
 export default function Home() {
-  return <></>;
+  return <ClientPage />;
 }

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
-import type { Client, Purchase, Installment } from '@/lib/types';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import type { Client, Purchase } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -16,11 +16,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { AddClientDialog, type AddClientFormValues } from '@/components/add-client-dialog';
 import { AddTransactionDialog, type AddTransactionFormValues } from '@/components/add-transaction-dialog';
 import { ViewHistoryDialog } from '@/components/view-history-dialog';
+import { EditClientDialog, type EditClientFormValues } from '@/components/edit-client-dialog';
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
 import {
   DollarSign,
   Users,
@@ -28,35 +31,15 @@ import {
   MoreHorizontal,
   History,
   Plus,
+  Trash2,
+  Edit,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { addMonths } from 'date-fns';
 
 
-const initialClientsData: Client[] = [
-  // {
-  //   id: '1',
-  //   name: 'João Silva',
-  //   purchases: [
-  //     { id: 'p1', item: 'Produto A', value: 150.0, date: new Date(2023, 10, 1).toISOString() },
-  //     { id: 'p2', item: 'Produto B', value: 200.0, date: new Date(2023, 10, 15).toISOString() },
-  //   ],
-  //   payments: [{ id: 'pay1', amount: 300.0, date: new Date(2023, 10, 20).toISOString() }],
-  // },
-  // {
-  //   id: '2',
-  //   name: 'Maria Oliveira',
-  //   purchases: [{ id: 'p3', item: 'Produto C', value: 500.0, date: new Date(2023, 11, 5).toISOString() }],
-  //   payments: [],
-  // },
-  // {
-  //   id: '3',
-  //   name: 'Carlos Pereira',
-  //   purchases: [{ id: 'p4', item: 'Serviço X', value: 1200.0, date: new Date(2023, 11, 10).toISOString() }],
-  //   payments: [{ id: 'pay2', amount: 1200.0, date: new Date(2023, 11, 12).toISOString() }],
-  // },
-];
+const initialClientsData: Client[] = [];
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('pt-BR', {
@@ -71,13 +54,15 @@ export function ClientPage() {
   const [isAddClientOpen, setAddClientOpen] = useState(false);
   const [isAddTransactionOpen, setAddTransactionOpen] = useState(false);
   const [isViewHistoryOpen, setViewHistoryOpen] = useState(false);
+  const [isEditClientOpen, setEditClientOpen] = useState(false);
+  const [isDeleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
   const { toast } = useToast();
 
-  const updateInstallmentStatuses = (clients: Client[]): Client[] => {
+  const updateInstallmentStatuses = useCallback((clientsToUpdate: Client[]): Client[] => {
     const now = new Date();
-    return clients.map(client => ({
+    return clientsToUpdate.map(client => ({
       ...client,
       purchases: client.purchases.map(purchase => ({
         ...purchase,
@@ -91,14 +76,14 @@ export function ClientPage() {
         })
       }))
     }));
-  };
+  }, []);
 
   useEffect(() => {
     const storedClients = localStorage.getItem('clients');
     const initialClients = storedClients ? JSON.parse(storedClients) : initialClientsData;
     setClients(updateInstallmentStatuses(initialClients));
     setIsClientMounted(true);
-  }, []);
+  }, [updateInstallmentStatuses]);
 
   useEffect(() => {
     if(isClientMounted) {
@@ -108,7 +93,7 @@ export function ClientPage() {
       }, 60000); // Check for overdue installments every minute
       return () => clearInterval(interval);
     }
-  }, [clients, isClientMounted]);
+  }, [clients, isClientMounted, updateInstallmentStatuses]);
 
 
   const totalOutstandingBalance = useMemo(() => {
@@ -127,6 +112,12 @@ export function ClientPage() {
     const newClient: Client = {
       id: crypto.randomUUID(),
       name: data.name,
+      phone: data.phone,
+      birthDate: data.birthDate,
+      address: data.address,
+      neighborhood: data.neighborhood,
+      childrenInfo: data.childrenInfo,
+      preferences: data.preferences,
       purchases: [],
       payments: [],
     };
@@ -173,6 +164,22 @@ export function ClientPage() {
     }
     setClients(prev => [...prev, newClient]);
     toast({ title: 'Sucesso!', description: 'Novo cliente adicionado.', className: 'bg-accent text-accent-foreground' });
+  };
+  
+  const handleEditClient = (data: EditClientFormValues) => {
+    if (!selectedClient) return;
+    setClients(prev => 
+      prev.map(c => 
+        c.id === selectedClient.id ? { ...c, ...data } : c
+      )
+    );
+    toast({ title: 'Sucesso!', description: 'Dados do cliente atualizados.', className: 'bg-accent text-accent-foreground' });
+  };
+
+  const handleDeleteClient = () => {
+    if (!selectedClient) return;
+    setClients(prev => prev.filter(c => c.id !== selectedClient.id));
+    toast({ title: 'Sucesso!', description: 'Cliente removido.', className: 'bg-destructive text-destructive-foreground' });
   };
 
   const handleAddTransaction = (data: AddTransactionFormValues) => {
@@ -255,6 +262,10 @@ export function ClientPage() {
                 installmentId: installmentId,
             });
           }
+           // Update selectedClient state if it's the one being modified
+           if (selectedClient && selectedClient.id === newClient.id) {
+            setSelectedClient(newClient);
+          }
           return newClient;
         }
         return client;
@@ -271,6 +282,16 @@ export function ClientPage() {
   const openHistoryDialog = (client: Client) => {
     setSelectedClient(client);
     setViewHistoryOpen(true);
+  };
+
+  const openEditDialog = (client: Client) => {
+    setSelectedClient(client);
+    setEditClientOpen(true);
+  };
+  
+  const openDeleteDialog = (client: Client) => {
+    setSelectedClient(client);
+    setDeleteConfirmOpen(true);
   };
 
   const calculateBalance = (client: Client) => {
@@ -368,6 +389,15 @@ export function ClientPage() {
                               <History className="mr-2 h-4 w-4" />
                               <span>Ver Histórico</span>
                             </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => openEditDialog(client)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                <span>Editar Cliente</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openDeleteDialog(client)} className="text-destructive focus:text-destructive">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                <span>Excluir Cliente</span>
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -397,8 +427,18 @@ export function ClientPage() {
         client={selectedClient}
         onPayInstallment={handlePayInstallment}
       />
+      <EditClientDialog
+        open={isEditClientOpen}
+        onOpenChange={setEditClientOpen}
+        onEditClient={handleEditClient}
+        client={selectedClient}
+      />
+      <DeleteConfirmationDialog
+        open={isDeleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        onConfirm={handleDeleteClient}
+        clientName={selectedClient?.name}
+      />
     </div>
   );
 }
-
-    

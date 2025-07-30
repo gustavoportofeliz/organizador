@@ -28,6 +28,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Nome deve ter pelo menos 2 caracteres.' }),
+  phone: z.string().optional(),
+  birthDate: z.string().optional(),
+  address: z.string().optional(),
+  neighborhood: z.string().optional(),
+  childrenInfo: z.string().optional(),
+  preferences: z.string().optional(),
   purchaseItem: z.string().optional(),
   purchaseValue: z.coerce.number().min(0).optional().default(0),
   paymentAmount: z.coerce.number().min(0).optional().default(0),
@@ -50,6 +56,12 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
+      phone: '',
+      birthDate: '',
+      address: '',
+      neighborhood: '',
+      childrenInfo: '',
+      preferences: '',
       purchaseItem: '',
       purchaseValue: 0,
       paymentAmount: 0,
@@ -58,9 +70,8 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
     },
   });
 
-  const { watch, setValue } = form;
+  const { watch } = form;
   const splitPurchase = watch('splitPurchase');
-  const installments = watch('installments');
 
   const onSubmit = (data: z.infer<typeof formSchema>) => {
     onAddClient(data);
@@ -69,7 +80,12 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      if (!isOpen) {
+        form.reset();
+      }
+      onOpenChange(isOpen);
+    }}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Adicionar Novo Cliente</DialogTitle>
@@ -78,7 +94,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 max-h-[70vh] overflow-y-auto pr-4">
             <FormField
               control={form.control}
               name="name"
@@ -87,6 +103,84 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
                   <FormLabel>Nome do Cliente</FormLabel>
                   <FormControl>
                     <Input placeholder="Ex: João da Silva" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+             <FormField
+              control={form.control}
+              name="phone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Telefone</FormLabel>
+                  <FormControl>
+                    <Input placeholder="(00) 00000-0000" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="birthDate"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Data de Nascimento</FormLabel>
+                  <FormControl>
+                    <Input placeholder="DD/MM/AAAA" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="address"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Endereço</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Rua, Número, Complemento" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="neighborhood"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Bairro</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Ex: Centro" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="childrenInfo"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Filhos</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Nomes e idades" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="preferences"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Gostos / Preferências</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Ex: Cores, estilos, etc." {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -175,7 +269,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
                 </FormItem>
               )}
             />
-            <DialogFooter>
+            <DialogFooter className="pt-4">
               <Button type="submit" className="bg-accent hover:bg-accent/90 text-accent-foreground">
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Adicionar Cliente

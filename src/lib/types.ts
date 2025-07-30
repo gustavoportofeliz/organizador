@@ -25,6 +25,12 @@ export type Payment = {
 export type Client = {
   id: string;
   name: string;
+  phone?: string;
+  birthDate?: string;
+  address?: string;
+  neighborhood?: string;
+  childrenInfo?: string;
+  preferences?: string;
   purchases: Purchase[];
   payments: Payment[];
 };

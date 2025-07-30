@@ -41,31 +41,35 @@ export function BirthdayPage() {
     }, [clients, isClientMounted]);
 
     const handleAddRelative = (data: AddRelativeFormValues) => {
-        const { client, name, birthDate, relationship } = data;
-        const selectedClient = clients.find(c => c.id === client);
-        if(!selectedClient) return;
-
-        const newRelative: Relative = {
-            id: crypto.randomUUID(),
-            name,
-            birthDate,
-            relationship,
-            clientId: selectedClient.id,
-            clientName: selectedClient.name,
-        };
-
-        setClients(prev => prev.map(c => {
-            if (c.id === client) {
-                const updatedClient = { ...c };
-                if (!updatedClient.relatives) {
-                    updatedClient.relatives = [];
+        const { client: clientId, name, birthDate, relationship } = data;
+    
+        setClients(prevClients => {
+            const newClients = prevClients.map(c => {
+                if (c.id === clientId) {
+                    const selectedClient = c;
+    
+                    const newRelative: Relative = {
+                        id: crypto.randomUUID(),
+                        name,
+                        birthDate,
+                        relationship,
+                        clientId: selectedClient.id,
+                        clientName: selectedClient.name,
+                    };
+    
+                    // Create a new relatives array by cloning the existing one (or starting fresh)
+                    // and adding the new relative.
+                    const updatedRelatives = [...(selectedClient.relatives || []), newRelative];
+    
+                    // Return a new client object with the updated relatives array.
+                    return { ...selectedClient, relatives: updatedRelatives };
                 }
-                updatedClient.relatives.push(newRelative);
-                return updatedClient;
-            }
-            return c;
-        }));
+                return c; // Return other clients unmodified.
+            });
+            return newClients;
+        });
     };
+    
 
     const birthdayPeople = useMemo(() => {
         const people: BirthdayPerson[] = [];

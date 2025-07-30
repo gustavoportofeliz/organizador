@@ -34,3 +34,20 @@ export type Client = {
   purchases: Purchase[];
   payments: Payment[];
 };
+
+export type ProductHistoryEntry = {
+    id: string;
+    date: string;
+    type: 'purchase' | 'sale'; // Compra da loja ou venda para cliente
+    quantity: number;
+    unitPrice: number;
+    notes?: string;
+}
+
+export type Product = {
+    id: string;
+    name: string;
+    quantity: number;
+    history: ProductHistoryEntry[];
+    createdAt: string;
+}

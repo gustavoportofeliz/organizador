@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Gift } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { isToday, isFuture, differenceInDays } from 'date-fns';
 
 export function BirthdayPage() {
     const [clients, setClients] = useState<Client[]>([]);
@@ -38,8 +39,8 @@ export function BirthdayPage() {
 
     const filteredAndSortedClients = useMemo(() => {
         const now = new Date();
+        now.setHours(0, 0, 0, 0); // Normalize 'now' to the start of the day
         const currentMonth = now.getMonth();
-        const currentDay = now.getDate();
 
         return clients
             .filter(client => {
@@ -48,32 +49,54 @@ export function BirthdayPage() {
             })
             .map(client => {
                 const birthDate = parseDate(client.birthDate)!;
+                birthDate.setHours(0, 0, 0, 0);
                 const birthMonth = birthDate.getMonth();
                 const birthDay = birthDate.getDate();
+                const currentYear = now.getFullYear();
 
-                let nextBirthday = new Date(now.getFullYear(), birthMonth, birthDay);
+                let nextBirthday = new Date(currentYear, birthMonth, birthDay);
+
+                // If birthday has already passed this year, check for next year's birthday
                 if (nextBirthday < now) {
-                    nextBirthday.setFullYear(now.getFullYear() + 1);
+                    nextBirthday.setFullYear(currentYear + 1);
                 }
 
-                const diffTime = nextBirthday.getTime() - now.getTime();
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                const diffDays = differenceInDays(nextBirthday, now);
+                
+                let status: 'default' | 'month' | 'week' | 'today' = 'default';
 
-                let status: 'default' | 'month' | 'week' = 'default';
-                if (birthMonth === currentMonth) {
-                    status = 'month';
-                }
-                if (diffDays >= 0 && diffDays <= 7) {
-                    status = 'week';
+                if (isToday(nextBirthday)) {
+                    status = 'today';
+                } else if (isFuture(nextBirthday)) {
+                    if (diffDays <= 7) {
+                        status = 'week';
+                    } else if (birthMonth === currentMonth) {
+                        status = 'month';
+                    }
                 }
 
-                return { ...client, status, daysUntilBirthday: diffDays, birthDateObj: birthDate };
+                return { ...client, status, daysUntilBirthday: diffDays, birthDateObj: birthDate, nextBirthday };
             })
-            .sort((a, b) => a.daysUntilBirthday - b.daysUntilBirthday);
+            // Sort by upcoming birthdays first, then by name
+            .sort((a, b) => {
+                if (a.daysUntilBirthday < b.daysUntilBirthday) return -1;
+                if (a.daysUntilBirthday > b.daysUntilBirthday) return 1;
+                return a.name.localeCompare(b.name);
+            });
     }, [clients, searchTerm]);
 
     if (!isClientMounted) {
         return null; // Or a loading spinner
+    }
+
+    const getDaysUntilText = (days: number, nextBirthday: Date) => {
+        if (isToday(nextBirthday)) {
+            return "Hoje é o dia!";
+        }
+        if (days === 1) {
+            return "Falta 1 dia";
+        }
+        return `Faltam ${days} dias`;
     }
 
     return (
@@ -98,6 +121,7 @@ export function BirthdayPage() {
                         <Card key={client.id} className={cn('transition-all', {
                             'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-400': client.status === 'month',
                             'bg-red-100 dark:bg-red-900/30 border-red-500': client.status === 'week',
+                            'bg-green-100 dark:bg-green-900/30 border-green-500': client.status === 'today',
                         })}>
                             <CardHeader>
                                 <CardTitle>{client.name}</CardTitle>
@@ -108,19 +132,21 @@ export function BirthdayPage() {
                                      <Gift className={cn("h-5 w-5", {
                                         'text-yellow-600': client.status === 'month',
                                         'text-red-600': client.status === 'week',
+                                        'text-green-600': client.status === 'today',
                                         'text-muted-foreground': client.status === 'default',
                                     })} />
                                     <span>
-                                        {client.daysUntilBirthday === 0 ? "Hoje é o dia!" : `Faltam ${client.daysUntilBirthday} dias`}
+                                        {getDaysUntilText(client.daysUntilBirthday, client.nextBirthday)}
                                     </span>
                                 </div>
                             </CardContent>
-                            {client.status === 'week' && client.daysUntilBirthday > 0 && (
+                           
+                            {client.status === 'week' && (
                                 <CardFooter>
                                     <Badge variant="destructive">Aniversário em breve!</Badge>
                                 </CardFooter>
                             )}
-                            {client.daysUntilBirthday === 0 && (
+                             {client.status === 'today' && (
                                 <CardFooter>
                                      <Badge className="bg-green-500 text-white">Feliz Aniversário!</Badge>
                                 </CardFooter>

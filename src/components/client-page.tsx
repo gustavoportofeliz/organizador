@@ -158,12 +158,25 @@ export function ClientPage() {
     }
 
     if (data.paymentAmount && data.paymentAmount > 0) {
-      newClient.payments.push({
-        id: crypto.randomUUID(),
-        amount: data.paymentAmount,
-        date: new Date().toISOString(),
-      });
-      // Logic to apply initial payment to installments would go here
+      // Find the first pending installment and apply the payment
+      let remainingPayment = data.paymentAmount;
+      for (const purchase of newClient.purchases) {
+        if (remainingPayment <= 0) break;
+        for (const installment of purchase.installments) {
+          if (remainingPayment <= 0) break;
+          if (installment.status === 'pending' && remainingPayment >= installment.value) {
+            remainingPayment -= installment.value;
+            installment.status = 'paid';
+            installment.paidDate = new Date().toISOString();
+             newClient.payments.push({
+                id: crypto.randomUUID(),
+                amount: installment.value,
+                date: new Date().toISOString(),
+                installmentId: installment.id,
+            });
+          }
+        }
+      }
     }
     setClients(prev => [newClient, ...prev]);
     toast({ title: 'Sucesso!', description: 'Novo cliente adicionado.', className: 'bg-accent text-accent-foreground' });
@@ -189,20 +202,21 @@ export function ClientPage() {
     if (!selectedClient) return;
 
     setClients(prev =>
-      prev.map(c => {
-        if (c.id === selectedClient.id) {
-          const updatedClient = { ...c };
-            const newPurchase: Purchase = {
-                id: crypto.randomUUID(),
-                item: data.item || 'Nova Compra',
-                totalValue: data.amount,
-                date: new Date().toISOString(),
-                installments: [],
-            };
-    
-            if (data.splitPurchase && data.installments && data.installments > 1) {
-                const installmentValue = data.amount / data.installments;
-                for (let i = 1; i <= data.installments; i++) {
+        prev.map(c => {
+            if (c.id === selectedClient.id) {
+                const updatedClient = { ...c, purchases: [...c.purchases] }; // Deep copy purchases
+                const newPurchase: Purchase = {
+                    id: crypto.randomUUID(),
+                    item: data.item,
+                    totalValue: data.amount,
+                    date: new Date().toISOString(),
+                    installments: [],
+                };
+
+                const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
+                const installmentValue = data.amount / installmentsCount;
+
+                for (let i = 1; i <= installmentsCount; i++) {
                     newPurchase.installments.push({
                         id: crypto.randomUUID(),
                         installmentNumber: i,
@@ -211,41 +225,32 @@ export function ClientPage() {
                         status: 'pending',
                     });
                 }
-            } else {
-                newPurchase.installments.push({
-                    id: crypto.randomUUID(),
-                    installmentNumber: 1,
-                    value: data.amount,
-                    dueDate: addMonths(new Date(), 1).toISOString(),
-                    status: 'pending',
-                });
+                
+                updatedClient.purchases.push(newPurchase);
+                if (selectedClient && selectedClient.id === updatedClient.id) {
+                    setSelectedClient(updatedClient);
+                }
+                return updatedClient;
             }
-            updatedClient.purchases.push(newPurchase);
-          
-            updatedClient.payments.push({ 
-                id: crypto.randomUUID(), 
-                amount: data.amount, 
-                date: new Date().toISOString() 
-            });
-          
-          return updatedClient;
-        }
-        return c;
-      })
+            return c;
+        })
     );
-    toast({ title: 'Sucesso!', description: 'Transação registrada.', className: 'bg-accent text-accent-foreground' });
-  };
+    toast({ title: 'Sucesso!', description: 'Nova compra registrada.', className: 'bg-accent text-accent-foreground' });
+};
+
   
   const handlePayInstallment = (clientId: string, purchaseId: string, installmentId: string) => {
     setClients(prevClients => {
       const updatedClients = prevClients.map(client => {
         if (client.id === clientId) {
           const newClient = { ...client };
+          let paidAmount = 0;
           newClient.purchases = newClient.purchases.map(purchase => {
             if (purchase.id === purchaseId) {
               const newPurchase = { ...purchase };
               newPurchase.installments = newPurchase.installments.map(inst => {
                 if (inst.id === installmentId && inst.status !== 'paid') {
+                  paidAmount = inst.value;
                   return { ...inst, status: 'paid', paidDate: new Date().toISOString() };
                 }
                 return inst;
@@ -254,16 +259,16 @@ export function ClientPage() {
             }
             return purchase;
           });
-          const purchase = newClient.purchases.find(p => p.id === purchaseId);
-          const installment = purchase?.installments.find(i => i.id === installmentId);
-          if (installment) {
+          
+          if(paidAmount > 0) {
             newClient.payments.push({
                 id: crypto.randomUUID(),
-                amount: installment.value,
+                amount: paidAmount,
                 date: new Date().toISOString(),
                 installmentId: installmentId,
             });
           }
+
            if (selectedClient && selectedClient.id === newClient.id) {
             setSelectedClient(newClient);
           }
@@ -294,12 +299,6 @@ export function ClientPage() {
   const openDeleteDialog = (client: Client) => {
     setSelectedClient(client);
     setDeleteConfirmOpen(true);
-  };
-
-  const calculateBalance = (client: Client) => {
-    const totalPurchases = client.purchases.reduce((sum, p) => sum + p.totalValue, 0);
-    const totalPayments = client.payments.reduce((sum, p) => sum + p.amount, 0);
-    return totalPurchases - totalPayments;
   };
 
   const getClientTotals = (client: Client) => {

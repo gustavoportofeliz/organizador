@@ -137,7 +137,7 @@ export function AddTransactionDialog({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Número de Parcelas</FormLabel>
-                      <Select onValueChange={(value) => field.onChange(parseInt(value))} defaultValue={String(field.value)}>
+                      <Select onValueChange={(value) => field.onChange(parseInt(value, 10))} defaultValue={String(field.value)}>
                           <FormControl>
                               <SelectTrigger>
                                   <SelectValue placeholder="Selecione o número de parcelas" />

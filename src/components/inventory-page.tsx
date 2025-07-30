@@ -66,25 +66,67 @@ export function InventoryPage() {
     }, [products, isClientMounted]);
 
     const handleAddProduct = (data: AddProductFormValues) => {
-        const newHistoryEntry: ProductHistoryEntry = {
-            id: crypto.randomUUID(),
-            date: new Date().toISOString(),
-            type: 'purchase',
-            quantity: data.quantity,
-            unitPrice: data.purchasePrice,
-            notes: 'Estoque inicial',
-        };
+      const { name, quantity, unitPrice, type, isNewProduct } = data;
+    
+      const newHistoryEntry: ProductHistoryEntry = {
+        id: crypto.randomUUID(),
+        date: new Date().toISOString(),
+        type: type,
+        quantity: quantity,
+        unitPrice: unitPrice,
+        notes: type === 'purchase' ? 'Compra de estoque' : 'Venda manual',
+      };
+    
+      if (isNewProduct) {
+        if (type === 'sale') {
+            toast({ variant: 'destructive', title: 'Erro!', description: `Não é possível realizar uma venda para um produto que não existe em estoque.` });
+            return;
+        }
 
+        const existingProduct = products.find(p => p.name.toLowerCase() === name.toLowerCase());
+        if (existingProduct) {
+            toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${name}" já existe. Selecione-o na lista para movimentar o estoque.` });
+            return;
+        }
+    
         const newProduct: Product = {
-            id: crypto.randomUUID(),
-            name: data.name,
-            quantity: data.quantity,
-            history: [newHistoryEntry],
-            createdAt: new Date().toISOString(),
+          id: crypto.randomUUID(),
+          name: name,
+          quantity: quantity,
+          history: [newHistoryEntry],
+          createdAt: new Date().toISOString(),
         };
-
+    
         setProducts(prev => [newProduct, ...prev]);
         toast({ title: 'Sucesso!', description: 'Novo produto adicionado ao estoque.', className: 'bg-accent text-accent-foreground' });
+      } else {
+        // Find existing product and update it
+        setProducts(prevProducts => {
+            const productIndex = prevProducts.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
+            if (productIndex === -1) {
+                toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${name}" não encontrado. Cadastre-o como um novo produto.` });
+                return prevProducts;
+            }
+
+            const updatedProducts = [...prevProducts];
+            const productToUpdate = { ...updatedProducts[productIndex] };
+
+            if (type === 'sale' && productToUpdate.quantity < quantity) {
+                toast({ variant: 'destructive', title: 'Erro!', description: `Estoque insuficiente para "${name}". Quantidade atual: ${productToUpdate.quantity}.` });
+                return prevProducts;
+            }
+
+            productToUpdate.quantity = type === 'purchase' 
+                ? productToUpdate.quantity + quantity 
+                : productToUpdate.quantity - quantity;
+            
+            productToUpdate.history = [newHistoryEntry, ...productToUpdate.history];
+            
+            updatedProducts[productIndex] = productToUpdate;
+            return updatedProducts;
+        });
+        toast({ title: 'Sucesso!', description: `Estoque do produto "${name}" atualizado.`, className: 'bg-accent text-accent-foreground' });
+      }
     };
 
     const filteredProducts = useMemo(() => {
@@ -104,7 +146,7 @@ export function InventoryPage() {
                 <h1 className="text-4xl font-headline font-bold text-foreground">Controle de Estoque</h1>
                 <Button onClick={() => setAddProductOpen(true)} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-transform hover:scale-105">
                 <PlusCircle className="mr-2 h-5 w-5" />
-                Adicionar Produto
+                Movimentar Produto
                 </Button>
             </header>
 
@@ -207,6 +249,7 @@ export function InventoryPage() {
                 open={isAddProductOpen}
                 onOpenChange={setAddProductOpen}
                 onAddProduct={handleAddProduct}
+                products={products}
             />
         </div>
     )

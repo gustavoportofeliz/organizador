@@ -25,6 +25,7 @@ import {
     AccordionTrigger,
 } from "@/components/ui/accordion";
 import { AddProductDialog, type AddProductFormValues } from '@/components/add-product-dialog';
+import { cn } from '@/lib/utils';
   
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -77,60 +78,65 @@ export function InventoryPage() {
         notes: type === 'purchase' ? 'Compra de estoque' : 'Venda manual',
       };
     
-      if (isNewProduct) {
-        if (type === 'sale') {
-            toast({ variant: 'destructive', title: 'Erro!', description: `Não é possível realizar uma venda para um produto que não existe em estoque.` });
-            return;
-        }
+      setProducts(prevProducts => {
+          const existingProductIndex = prevProducts.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
+          
+          if (isNewProduct) {
+              if (type === 'sale') {
+                  toast({ variant: 'destructive', title: 'Erro!', description: 'Não é possível vender um produto que não existe.' });
+                  return prevProducts;
+              }
+              if (existingProductIndex !== -1) {
+                  toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${name}" já existe. Use a seleção de produto.` });
+                  return prevProducts;
+              }
+              const newProduct: Product = {
+                id: crypto.randomUUID(),
+                name: name,
+                quantity: quantity,
+                history: [newHistoryEntry],
+                createdAt: new Date().toISOString(),
+              };
+              toast({ title: 'Sucesso!', description: 'Novo produto adicionado.', className: 'bg-accent text-accent-foreground' });
+              return [newProduct, ...prevProducts];
+          } else {
+              if (existingProductIndex === -1) {
+                 toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${name}" não encontrado.` });
+                 return prevProducts;
+              }
+              
+              const updatedProducts = [...prevProducts];
+              const productToUpdate = { ...updatedProducts[existingProductIndex] };
 
-        const existingProduct = products.find(p => p.name.toLowerCase() === name.toLowerCase());
-        if (existingProduct) {
-            toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${name}" já existe. Selecione-o na lista para movimentar o estoque.` });
-            return;
-        }
-    
-        const newProduct: Product = {
-          id: crypto.randomUUID(),
-          name: name,
-          quantity: quantity,
-          history: [newHistoryEntry],
-          createdAt: new Date().toISOString(),
-        };
-    
-        setProducts(prev => [newProduct, ...prev]);
-        toast({ title: 'Sucesso!', description: 'Novo produto adicionado ao estoque.', className: 'bg-accent text-accent-foreground' });
-      } else {
-        // Find existing product and update it
-        setProducts(prevProducts => {
-            const productIndex = prevProducts.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
-            if (productIndex === -1) {
-                toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${name}" não encontrado. Cadastre-o como um novo produto.` });
-                return prevProducts;
-            }
+              if (type === 'sale' && productToUpdate.quantity < quantity) {
+                  toast({ variant: 'destructive', title: 'Erro!', description: `Estoque insuficiente para "${name}".` });
+                  return prevProducts;
+              }
 
-            const updatedProducts = [...prevProducts];
-            const productToUpdate = { ...updatedProducts[productIndex] };
-
-            if (type === 'sale' && productToUpdate.quantity < quantity) {
-                toast({ variant: 'destructive', title: 'Erro!', description: `Estoque insuficiente para "${name}". Quantidade atual: ${productToUpdate.quantity}.` });
-                return prevProducts;
-            }
-
-            productToUpdate.quantity = type === 'purchase' 
-                ? productToUpdate.quantity + quantity 
-                : productToUpdate.quantity - quantity;
-            
-            productToUpdate.history = [newHistoryEntry, ...productToUpdate.history];
-            
-            updatedProducts[productIndex] = productToUpdate;
-            toast({ title: 'Sucesso!', description: `Estoque do produto "${name}" atualizado.`, className: 'bg-accent text-accent-foreground' });
-            return updatedProducts;
-        });
-      }
+              productToUpdate.quantity = type === 'purchase' 
+                  ? productToUpdate.quantity + quantity 
+                  : productToUpdate.quantity - quantity;
+              
+              productToUpdate.history = [newHistoryEntry, ...productToUpdate.history];
+              updatedProducts[existingProductIndex] = productToUpdate;
+              
+              toast({ title: 'Sucesso!', description: 'Movimentação registrada.', className: 'bg-accent text-accent-foreground' });
+              return updatedProducts;
+          }
+      });
     };
 
     const filteredProducts = useMemo(() => {
-        return products.filter(product => {
+        return products.map(product => {
+            const totalSales = product.history
+                .filter(e => e.type === 'sale')
+                .reduce((acc, e) => acc + (e.quantity * e.unitPrice), 0);
+            const totalPurchases = product.history
+                .filter(e => e.type === 'purchase')
+                .reduce((acc, e) => acc + (e.quantity * e.unitPrice), 0);
+            const balance = totalSales - totalPurchases;
+            return { ...product, balance };
+        }).filter(product => {
             const search = searchTerm.toLowerCase();
             return product.name.toLowerCase().includes(search);
         }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -195,7 +201,14 @@ export function InventoryPage() {
                                     <AccordionTrigger>
                                         <div className="flex justify-between w-full pr-4 items-center">
                                             <span className="font-medium text-lg">{product.name}</span>
-                                            <span className="text-muted-foreground">Quantidade: <span className="font-bold text-foreground">{product.quantity}</span></span>
+                                            <div className="flex items-center gap-6 text-sm">
+                                                <span className="text-muted-foreground">
+                                                    Saldo: <span className={cn('font-bold', product.balance >= 0 ? 'text-green-600' : 'text-red-600')}>{formatCurrency(product.balance)}</span>
+                                                </span>
+                                                <span className="text-muted-foreground">
+                                                    Quantidade: <span className="font-bold text-foreground">{product.quantity}</span>
+                                                </span>
+                                            </div>
                                         </div>
                                     </AccordionTrigger>
                                     <AccordionContent>

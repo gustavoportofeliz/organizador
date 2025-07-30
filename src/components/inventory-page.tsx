@@ -82,15 +82,15 @@ export function InventoryPage() {
 
     const handleAddProduct = (data: AddProductFormValues) => {
         const { name, quantity, unitPrice, type, isNewProduct } = data;
-        
+    
         const existingProductIndex = products.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
         const existingProduct = products[existingProductIndex];
-        
-        if (type === 'sale' && !existingProduct) {
-             toast({ variant: 'destructive', title: 'Erro!', description: 'Não é possível vender um produto que não existe no estoque.' });
-             return;
+    
+        if (type === 'sale' && isNewProduct) {
+            toast({ variant: 'destructive', title: 'Erro!', description: 'Não é possível vender um produto que não existe no estoque.' });
+            return;
         }
-
+        
         const newHistoryEntry: ProductHistoryEntry = {
             id: crypto.randomUUID(),
             date: new Date().toISOString(),
@@ -99,7 +99,7 @@ export function InventoryPage() {
             unitPrice: unitPrice,
             notes: type === 'purchase' ? 'Compra de estoque' : 'Venda manual',
         };
-        
+    
         setProducts(prevProducts => {
             if (isNewProduct) {
                 const newProduct: Product = {
@@ -114,7 +114,7 @@ export function InventoryPage() {
             } else {
                 const updatedProducts = [...prevProducts];
                 const productToUpdate = { ...updatedProducts[existingProductIndex] };
-                
+    
                 productToUpdate.quantity = type === 'purchase' 
                     ? productToUpdate.quantity + quantity 
                     : productToUpdate.quantity - quantity;
@@ -234,37 +234,41 @@ export function InventoryPage() {
                         <Accordion type="multiple" className="w-full">
                             {filteredProducts.map(product => (
                                 <AccordionItem value={product.id} key={product.id} className={cn(product.quantity < 0 && 'bg-red-50 dark:bg-red-900/20')}>
-                                    <AccordionTrigger>
-                                        <div className="flex justify-between w-full pr-4 items-center">
-                                            <span className="font-medium text-lg">{product.name}</span>
-                                            <div className="flex items-center gap-4 text-sm">
-                                                <span className="text-muted-foreground">
-                                                    Saldo: <span className={cn('font-bold', product.balance >= 0 ? 'text-green-600' : 'text-red-600')}>{formatCurrency(product.balance)}</span>
-                                                </span>
-                                                <span className="text-muted-foreground">
-                                                    Quantidade: <span className={cn('font-bold', product.quantity > 0 ? 'text-green-600' : 'text-red-600')}>{product.quantity}</span>
-                                                </span>
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" className="h-8 w-8 p-0">
+                                    <div className="flex items-center w-full">
+                                        <AccordionTrigger className="flex-1">
+                                            <div className="flex justify-between w-full pr-4 items-center">
+                                                <span className="font-medium text-lg">{product.name}</span>
+                                                <div className="flex items-center gap-4 text-sm">
+                                                    <span className="text-muted-foreground">
+                                                        Saldo: <span className={cn('font-bold', product.balance >= 0 ? 'text-green-600' : 'text-red-600')}>{formatCurrency(product.balance)}</span>
+                                                    </span>
+                                                    <span className="text-muted-foreground">
+                                                        Quantidade: <span className={cn('font-bold', product.quantity > 0 ? 'text-green-600' : 'text-red-600')}>{product.quantity}</span>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </AccordionTrigger>
+                                        <div onClick={(e) => e.stopPropagation()}>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" className="h-8 w-8 p-0">
                                                         <span className="sr-only">Abrir menu</span>
                                                         <MoreVertical className="h-4 w-4" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditDialog(product); }}>
-                                                            <Edit className="mr-2 h-4 w-4" />
-                                                            <span>Editar</span>
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openDeleteDialog(product); }} className="text-destructive focus:text-destructive">
-                                                            <Trash2 className="mr-2 h-4 w-4" />
-                                                            <span>Excluir</span>
-                                                        </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </div>
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditDialog(product); }}>
+                                                        <Edit className="mr-2 h-4 w-4" />
+                                                        <span>Editar</span>
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openDeleteDialog(product); }} className="text-destructive focus:text-destructive">
+                                                        <Trash2 className="mr-2 h-4 w-4" />
+                                                        <span>Excluir</span>
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </div>
-                                    </AccordionTrigger>
+                                    </div>
                                     <AccordionContent>
                                         <h4 className="font-semibold mb-2 px-1">Histórico de Movimentação</h4>
                                         <Table>

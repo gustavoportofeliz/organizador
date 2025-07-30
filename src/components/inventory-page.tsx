@@ -72,7 +72,7 @@ export function InventoryPage() {
         const existingProductIndex = products.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
         const existingProduct = products[existingProductIndex];
         
-        // --- Validations moved here ---
+        // --- Validations ---
         if (isNewProduct) {
             if (type === 'sale') {
                 toast({ variant: 'destructive', title: 'Erro!', description: 'Não é possível vender um produto que não existe no estoque.' });
@@ -85,10 +85,6 @@ export function InventoryPage() {
         } else {
             if (existingProductIndex === -1) {
                 toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${name}" não foi encontrado.` });
-                return;
-            }
-            if (type === 'sale' && existingProduct.quantity < quantity) {
-                toast({ variant: 'destructive', title: 'Erro!', description: `Estoque insuficiente para "${name}".` });
                 return;
             }
         }

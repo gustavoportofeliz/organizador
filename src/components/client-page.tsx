@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import type { Client, Purchase } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -33,6 +34,7 @@ import {
   Plus,
   Trash2,
   Edit,
+  Search,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -57,6 +59,7 @@ export function ClientPage() {
   const [isEditClientOpen, setEditClientOpen] = useState(false);
   const [isDeleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const { toast } = useToast();
 
@@ -162,7 +165,7 @@ export function ClientPage() {
       });
       // Logic to apply initial payment to installments would go here
     }
-    setClients(prev => [...prev, newClient]);
+    setClients(prev => [newClient, ...prev]);
     toast({ title: 'Sucesso!', description: 'Novo cliente adicionado.', className: 'bg-accent text-accent-foreground' });
   };
   
@@ -234,8 +237,8 @@ export function ClientPage() {
   };
   
   const handlePayInstallment = (clientId: string, purchaseId: string, installmentId: string) => {
-    setClients(prevClients => 
-      prevClients.map(client => {
+    setClients(prevClients => {
+      const updatedClients = prevClients.map(client => {
         if (client.id === clientId) {
           const newClient = { ...client };
           newClient.purchases = newClient.purchases.map(purchase => {
@@ -251,7 +254,6 @@ export function ClientPage() {
             }
             return purchase;
           });
-          // Optionally add a payment record
           const purchase = newClient.purchases.find(p => p.id === purchaseId);
           const installment = purchase?.installments.find(i => i.id === installmentId);
           if (installment) {
@@ -262,15 +264,15 @@ export function ClientPage() {
                 installmentId: installmentId,
             });
           }
-           // Update selectedClient state if it's the one being modified
            if (selectedClient && selectedClient.id === newClient.id) {
             setSelectedClient(newClient);
           }
           return newClient;
         }
         return client;
-      })
-    );
+      });
+      return updateInstallmentStatuses(updatedClients);
+    });
     toast({ title: 'Sucesso!', description: 'Parcela quitada.', className: 'bg-accent text-accent-foreground' });
   };
 
@@ -306,6 +308,20 @@ export function ClientPage() {
     const balance = totalPurchases - totalPayments;
     return { totalPurchases, totalPayments, balance };
   }
+  
+  const filteredClients = useMemo(() => {
+    return clients.filter(client => {
+      const search = searchTerm.toLowerCase();
+      return (
+        client.name.toLowerCase().includes(search) ||
+        (client.phone && client.phone.includes(search)) ||
+        (client.address && client.address.toLowerCase().includes(search)) ||
+        (client.neighborhood && client.neighborhood.toLowerCase().includes(search)) ||
+        (client.childrenInfo && client.childrenInfo.toLowerCase().includes(search)) ||
+        (client.preferences && client.preferences.toLowerCase().includes(search))
+      );
+    });
+  }, [clients, searchTerm]);
 
 
   if (!isClientMounted) {
@@ -313,9 +329,9 @@ export function ClientPage() {
   }
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8 font-body bg-background min-h-screen">
-      <header className="flex flex-col sm:flex-row items-center justify-between mb-8">
-        <h1 className="text-4xl font-headline font-bold text-foreground mb-4 sm:mb-0">Organizador de Clientes</h1>
+    <div className="font-body bg-background min-h-screen">
+      <header className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4">
+        <h1 className="text-4xl font-headline font-bold text-foreground">Visão Geral dos Clientes</h1>
         <Button onClick={() => setAddClientOpen(true)} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-transform hover:scale-105">
           <PlusCircle className="mr-2 h-5 w-5" />
           Adicionar Novo Cliente
@@ -347,7 +363,16 @@ export function ClientPage() {
 
       <Card className="shadow-xl border-border">
         <CardHeader>
-            <CardTitle>Visão Geral dos Clientes</CardTitle>
+            <CardTitle>Filtro de Clientes</CardTitle>
+            <div className="relative mt-2">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Busque por nome, telefone, endereço..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -362,7 +387,7 @@ export function ClientPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {clients.map(client => {
+                {filteredClients.map(client => {
                   const { totalPurchases, totalPayments, balance } = getClientTotals(client);
                   return (
                     <TableRow key={client.id} className="hover:bg-secondary/50 transition-colors duration-300">

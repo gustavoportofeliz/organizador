@@ -22,6 +22,15 @@ export type Payment = {
   installmentId?: string; 
 };
 
+export type Relative = {
+    id: string;
+    name: string;
+    birthDate: string;
+    relationship: string;
+    clientId: string;
+    clientName: string;
+}
+
 export type Client = {
   id: string;
   name: string;
@@ -33,6 +42,7 @@ export type Client = {
   preferences?: string; // Mantido como texto para nomes de produtos
   purchases: Purchase[];
   payments: Payment[];
+  relatives?: Relative[];
 };
 
 export type ProductHistoryEntry = {

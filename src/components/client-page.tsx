@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import type { Client, Purchase, Product, ProductHistoryEntry } from '@/lib/types';
+import type { Client, Purchase, Product, ProductHistoryEntry, Relative } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -133,6 +133,7 @@ export function ClientPage() {
       preferences: data.preferences,
       purchases: [],
       payments: [],
+      relatives: [],
     };
 
     if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
@@ -209,7 +210,6 @@ export function ClientPage() {
       setProducts(prevProducts => {
           const productIndex = prevProducts.findIndex(p => p.name.toLowerCase() === productName.toLowerCase());
           if (productIndex === -1) {
-              toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${productName}" não encontrado no estoque.` });
               return prevProducts;
           }
 
@@ -217,7 +217,6 @@ export function ClientPage() {
           const productToUpdate = { ...updatedProducts[productIndex] };
 
           if (productToUpdate.quantity < quantitySold) {
-              toast({ variant: 'destructive', title: 'Erro!', description: `Estoque insuficiente para "${productName}".` });
               return prevProducts;
           }
 

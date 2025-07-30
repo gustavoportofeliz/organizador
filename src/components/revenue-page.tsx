@@ -2,7 +2,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import type { Client, Purchase, Installment } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { DollarSign, CheckCircle, AlertCircle } from 'lucide-react';
+import { DollarSign, CheckCircle } from 'lucide-react';
 import {
     Table,
     TableBody,
@@ -40,7 +40,6 @@ export function RevenuePage() {
         const data: { 
             [key: string]: { 
                 paid: number; 
-                due: number;
                 details: { client: string; value: number; status: string }[] 
             } 
         } = {};
@@ -50,28 +49,27 @@ export function RevenuePage() {
                 purchase.installments.forEach(installment => {
                     const monthYear = getMonthYear(installment.dueDate);
                     if (!data[monthYear]) {
-                        data[monthYear] = { paid: 0, due: 0, details: [] };
+                        data[monthYear] = { paid: 0, details: [] };
                     }
                     if (installment.status === 'paid') {
                         data[monthYear].paid += installment.value;
-                        data[monthYear].details.push({
-                            client: client.name,
-                            value: installment.value,
-                            status: 'Quitado'
-                        });
-                    } else {
-                        data[monthYear].due += installment.value;
-                         data[monthYear].details.push({
-                            client: client.name,
-                            value: installment.value,
-                            status: installment.status === 'overdue' ? 'Vencido' : 'Pendente'
-                        });
                     }
+                    
+                    data[monthYear].details.push({
+                        client: client.name,
+                        value: installment.value,
+                        status: installment.status === 'paid' 
+                            ? 'Quitado' 
+                            : installment.status === 'overdue' 
+                            ? 'Vencido' 
+                            : 'Pendente'
+                    });
                 });
             });
         });
-
-        return Object.entries(data).sort(([a], [b]) => new Date(b.split(' de ')[1], getMonthIndex(b.split(' de ')[0])).getTime() - new Date(a.split(' de ')[1], getMonthIndex(a.split(' de ')[0])).getTime());
+        
+        // Sort months in ascending order (oldest first)
+        return Object.entries(data).sort(([a], [b]) => new Date(a.split(' de ')[1], getMonthIndex(a.split(' de ')[0])).getTime() - new Date(b.split(' de ')[1], getMonthIndex(b.split(' de ')[0])).getTime());
 
     }, [clients]);
 
@@ -117,19 +115,12 @@ export function RevenuePage() {
                             <CardDescription>Resumo financeiro do mês.</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="grid gap-4 md:grid-cols-2">
+                            <div className="grid gap-4 md:grid-cols-1">
                                 <div className="flex items-center gap-4 rounded-lg bg-green-50 dark:bg-green-900/30 p-4">
                                     <CheckCircle className="h-8 w-8 text-green-600" />
                                     <div>
-                                        <p className="text-sm text-green-700 dark:text-green-300">Total Quitado</p>
+                                        <p className="text-sm text-green-700 dark:text-green-300">Total Quitado no Mês</p>
                                         <p className="text-xl font-bold text-green-800 dark:text-green-200">{formatCurrency(data.paid)}</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-4 rounded-lg bg-red-50 dark:bg-red-900/30 p-4">
-                                     <AlertCircle className="h-8 w-8 text-red-600" />
-                                    <div>
-                                        <p className="text-sm text-red-700 dark:text-red-300">Total Devido</p>
-                                        <p className="text-xl font-bold text-red-800 dark:text-red-200">{formatCurrency(data.due)}</p>
                                     </div>
                                 </div>
                             </div>
@@ -141,7 +132,7 @@ export function RevenuePage() {
                                             <TableRow>
                                                 <TableHead>Cliente</TableHead>
                                                 <TableHead>Status</TableHead>
-                                                <TableHead className="text-right">Valor</TableHead>
+                                                <TableHead className="text-right">Valor da Parcela</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>

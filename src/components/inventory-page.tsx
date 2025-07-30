@@ -1,6 +1,6 @@
 'use client';
 import { useState, useMemo, useEffect } from 'react';
-import type { Product } from '@/lib/types';
+import type { Product, ProductHistoryEntry } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -23,9 +23,9 @@ import {
     AccordionContent,
     AccordionItem,
     AccordionTrigger,
-} from "@/components/ui/accordion"
+} from "@/components/ui/accordion";
+import { AddProductDialog, type AddProductFormValues } from '@/components/add-product-dialog';
   
-
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -45,6 +45,7 @@ const formatDate = (dateString: string) => {
 export function InventoryPage() {
     const [products, setProducts] = useState<Product[]>([]);
     const [isClientMounted, setIsClientMounted] = useState(false);
+    const [isAddProductOpen, setAddProductOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const { toast } = useToast();
 
@@ -62,6 +63,28 @@ export function InventoryPage() {
         }
     }, [products, isClientMounted]);
 
+    const handleAddProduct = (data: AddProductFormValues) => {
+        const newHistoryEntry: ProductHistoryEntry = {
+            id: crypto.randomUUID(),
+            date: new Date().toISOString(),
+            type: 'purchase',
+            quantity: data.quantity,
+            unitPrice: data.purchasePrice,
+            notes: 'Estoque inicial',
+        };
+
+        const newProduct: Product = {
+            id: crypto.randomUUID(),
+            name: data.name,
+            quantity: data.quantity,
+            history: [newHistoryEntry],
+            createdAt: new Date().toISOString(),
+        };
+
+        setProducts(prev => [newProduct, ...prev]);
+        toast({ title: 'Sucesso!', description: 'Novo produto adicionado ao estoque.', className: 'bg-accent text-accent-foreground' });
+    };
+
     const filteredProducts = useMemo(() => {
         return products.filter(product => {
             const search = searchTerm.toLowerCase();
@@ -77,7 +100,7 @@ export function InventoryPage() {
         <div className="font-body bg-background min-h-screen">
             <header className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4">
                 <h1 className="text-4xl font-headline font-bold text-foreground">Controle de Estoque</h1>
-                <Button onClick={() => alert("Funcionalidade de adicionar produto em breve!")} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-transform hover:scale-105">
+                <Button onClick={() => setAddProductOpen(true)} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-transform hover:scale-105">
                 <PlusCircle className="mr-2 h-5 w-5" />
                 Adicionar Produto
                 </Button>
@@ -175,6 +198,12 @@ export function InventoryPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            <AddProductDialog
+                open={isAddProductOpen}
+                onOpenChange={setAddProductOpen}
+                onAddProduct={handleAddProduct}
+            />
         </div>
     )
 }

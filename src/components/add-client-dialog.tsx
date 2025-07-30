@@ -26,6 +26,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { Product } from '@/lib/types';
+import React, { useEffect } from 'react';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Nome deve ter pelo menos 2 caracteres.' }),
@@ -40,7 +41,7 @@ const formSchema = z.object({
   paymentAmount: z.coerce.number().min(0).optional().default(0),
   splitPurchase: z.boolean().default(false),
   installments: z.coerce.number().min(1).max(6).optional(),
-  installmentDueDates: z.array(z.string().optional()).optional(),
+  installmentDueDates: z.array(z.object({ value: z.string().optional() })).optional(),
 });
 
 export type AddClientFormValues = z.infer<typeof formSchema>;
@@ -82,9 +83,9 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
   });
 
   // Sync the due date fields with the number of installments
-  React.useEffect(() => {
-    const newFields = Array.from({ length: installments || 0 }, () => '');
-    replace(newFields.map(v => ({ value: v })));
+  useEffect(() => {
+    const newFields = Array.from({ length: installments || 0 }, () => ({ value: '' }));
+    replace(newFields);
   }, [installments, replace]);
 
   const onSubmit = (data: AddClientFormValues) => {
@@ -286,7 +287,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
               <FormField
                 key={field.id}
                 control={control}
-                name={`installmentDueDates.${index}`}
+                name={`installmentDueDates.${index}.value`}
                 render={({ field: dateField }) => (
                   <FormItem>
                     <FormLabel>Vencimento Parcela {index + 1}</FormLabel>

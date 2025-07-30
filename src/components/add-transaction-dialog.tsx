@@ -33,7 +33,7 @@ const formSchema = z.object({
   amount: z.coerce.number().min(0.01, { message: 'O valor deve ser maior que zero.' }),
   splitPurchase: z.boolean().default(false),
   installments: z.coerce.number().min(1).max(6).optional(),
-  installmentDueDates: z.array(z.string().optional()).optional(),
+  installmentDueDates: z.array(z.object({ value: z.string().optional() })).optional(),
 });
 
 export type AddTransactionFormValues = z.infer<typeof formSchema>;
@@ -79,8 +79,8 @@ export function AddTransactionDialog({
 
   // Sync the due date fields with the number of installments
   React.useEffect(() => {
-    const newFields = Array.from({ length: installments || 0 }, () => '');
-    replace(newFields.map(v => ({ value: v })));
+    const newFields = Array.from({ length: installments || 0 }, () => ({ value: '' }));
+    replace(newFields);
   }, [installments, replace]);
 
 
@@ -185,7 +185,7 @@ export function AddTransactionDialog({
               <FormField
                 key={field.id}
                 control={control}
-                name={`installmentDueDates.${index}`}
+                name={`installmentDueDates.${index}.value`}
                 render={({ field: dateField }) => (
                   <FormItem>
                     <FormLabel>Vencimento Parcela {index + 1}</FormLabel>

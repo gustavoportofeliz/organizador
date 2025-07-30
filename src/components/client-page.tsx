@@ -148,8 +148,9 @@ export function ClientPage() {
         const installmentValue = data.purchaseValue / installmentsCount;
 
         for (let i = 1; i <= installmentsCount; i++) {
-            const dueDate = data.installmentDueDates && data.installmentDueDates[i-1] 
-                          ? new Date(data.installmentDueDates[i-1] + 'T00:00:00') 
+            const dueDateValue = data.installmentDueDates?.[i-1]?.value;
+            const dueDate = dueDateValue
+                          ? new Date(dueDateValue + 'T00:00:00') 
                           : addMonths(new Date(), i);
             newPurchase.installments.push({
                 id: crypto.randomUUID(),
@@ -257,8 +258,9 @@ export function ClientPage() {
                 const installmentValue = data.amount / installmentsCount;
 
                 for (let i = 1; i <= installmentsCount; i++) {
-                    const dueDate = data.installmentDueDates && data.installmentDueDates[i-1] 
-                                  ? new Date(data.installmentDueDates[i-1] + 'T00:00:00') 
+                    const dueDateValue = data.installmentDueDates?.[i-1]?.value;
+                    const dueDate = dueDateValue
+                                  ? new Date(dueDateValue + 'T00:00:00') 
                                   : addMonths(new Date(), i);
                     newPurchase.installments.push({
                         id: crypto.randomUUID(),

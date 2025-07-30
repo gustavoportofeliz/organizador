@@ -21,7 +21,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { PlusCircle, Calendar as CalendarIcon, Trash2 } from 'lucide-react';
+import { PlusCircle } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -41,7 +41,7 @@ const formSchema = z.object({
   paymentAmount: z.coerce.number().min(0).optional().default(0),
   splitPurchase: z.boolean().default(false),
   installments: z.coerce.number().min(1).max(6).optional(),
-  installmentDueDates: z.array(z.object({ value: z.string().optional() })).optional(),
+  installmentInterval: z.coerce.number().min(1).optional().default(30),
 });
 
 export type AddClientFormValues = z.infer<typeof formSchema>;
@@ -69,24 +69,12 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
       paymentAmount: 0,
       splitPurchase: false,
       installments: 1,
-      installmentDueDates: [],
+      installmentInterval: 30,
     },
   });
 
-  const { watch, control, setValue } = form;
+  const { watch, control } = form;
   const splitPurchase = watch('splitPurchase');
-  const installments = watch('installments');
-
-  const { fields, replace } = useFieldArray({
-    control,
-    name: "installmentDueDates",
-  });
-
-  // Sync the due date fields with the number of installments
-  useEffect(() => {
-    const newFields = Array.from({ length: installments || 0 }, () => ({ value: '' }));
-    replace(newFields);
-  }, [installments, replace]);
 
   const onSubmit = (data: AddClientFormValues) => {
     onAddClient(data);
@@ -143,7 +131,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
                 <FormItem>
                   <FormLabel>Data de Nascimento</FormLabel>
                   <FormControl>
-                    <Input type="date" {...field} />
+                    <Input type="text" placeholder="DD/MM/AAAA" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -259,6 +247,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
             </div>
 
             {splitPurchase && (
+                <div className="grid grid-cols-2 gap-4">
                  <FormField
                     control={control}
                     name="installments"
@@ -281,25 +270,21 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
                       </FormItem>
                     )}
                   />
+                  <FormField
+                    control={control}
+                    name="installmentInterval"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Intervalo (dias)</FormLabel>
+                        <FormControl>
+                          <Input type="number" step="1" placeholder="30" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
             )}
-
-            {splitPurchase && fields.map((field, index) => (
-              <FormField
-                key={field.id}
-                control={control}
-                name={`installmentDueDates.${index}.value`}
-                render={({ field: dateField }) => (
-                  <FormItem>
-                    <FormLabel>Vencimento Parcela {index + 1}</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...dateField} value={dateField.value || ''} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ))}
-
 
             <FormField
               control={control}

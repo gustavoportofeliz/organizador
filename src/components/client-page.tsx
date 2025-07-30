@@ -38,7 +38,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { addMonths, format, parseISO } from 'date-fns';
+import { addDays, format, parseISO } from 'date-fns';
 
 
 const initialClientsData: Client[] = [];
@@ -147,15 +147,13 @@ export function ClientPage() {
         
         const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
         const installmentValue = data.purchaseValue / installmentsCount;
+        const intervalDays = data.installmentInterval || 30;
 
-        for (let i = 1; i <= installmentsCount; i++) {
-            const dueDateValue = data.installmentDueDates?.[i-1]?.value;
-            const dueDate = dueDateValue
-                          ? new Date(dueDateValue + 'T00:00:00') 
-                          : addMonths(new Date(), i);
+        for (let i = 0; i < installmentsCount; i++) {
+            const dueDate = addDays(new Date(), (i + 1) * intervalDays);
             newPurchase.installments.push({
                 id: crypto.randomUUID(),
-                installmentNumber: i,
+                installmentNumber: i + 1,
                 value: installmentValue,
                 dueDate: dueDate.toISOString(),
                 status: 'pending',
@@ -208,80 +206,93 @@ export function ClientPage() {
   
   const updateProductStock = (productName: string, quantitySold: number, clientName: string, unitPrice: number) => {
       setProducts(prevProducts => {
-          const productIndex = prevProducts.findIndex(p => p.name.toLowerCase() === productName.toLowerCase());
-          if (productIndex === -1) {
-              return prevProducts;
-          }
-
-          const updatedProducts = [...prevProducts];
-          const productToUpdate = { ...updatedProducts[productIndex] };
-
-          if (productToUpdate.quantity < quantitySold) {
-              return prevProducts;
-          }
-
-          productToUpdate.quantity -= quantitySold;
-          
-          const newHistoryEntry: ProductHistoryEntry = {
-              id: crypto.randomUUID(),
-              date: new Date().toISOString(),
-              type: 'sale',
-              quantity: quantitySold,
-              unitPrice: unitPrice, 
-              notes: `Venda para ${clientName}`,
-              clientName: clientName
-          };
-          productToUpdate.history = [newHistoryEntry, ...productToUpdate.history];
-          
-          updatedProducts[productIndex] = productToUpdate;
-          return updatedProducts;
+        const productIndex = prevProducts.findIndex(p => p.name.toLowerCase() === productName.toLowerCase());
+        if (productIndex === -1) {
+          toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${productName}" não encontrado no estoque.` });
+          return prevProducts;
+        }
+    
+        const updatedProducts = [...prevProducts];
+        const productToUpdate = { ...updatedProducts[productIndex] };
+    
+        if (productToUpdate.quantity < quantitySold) {
+          toast({
+            variant: "destructive",
+            title: "Estoque insuficiente!",
+            description: `Só existem ${productToUpdate.quantity} unidades de ${productName}.`,
+          })
+        }
+    
+        productToUpdate.quantity -= quantitySold;
+    
+        const newHistoryEntry: ProductHistoryEntry = {
+          id: crypto.randomUUID(),
+          date: new Date().toISOString(),
+          type: 'sale',
+          quantity: quantitySold,
+          unitPrice: unitPrice,
+          notes: `Venda para ${clientName}`,
+          clientName: clientName
+        };
+        productToUpdate.history = [newHistoryEntry, ...productToUpdate.history];
+    
+        updatedProducts[productIndex] = productToUpdate;
+        return updatedProducts;
       });
   }
 
   const handleAddTransaction = (data: AddTransactionFormValues) => {
     if (!selectedClient) return;
-
+  
+    const productInStock = products.find(p => p.name.toLowerCase() === data.item.toLowerCase());
+    if (!productInStock || productInStock.quantity < 1) {
+      toast({
+        variant: "destructive",
+        title: "Estoque insuficiente!",
+        description: `Não há estoque disponível para ${data.item}.`,
+      });
+      return;
+    }
+  
     setClients(prev =>
-        prev.map(c => {
-            if (c.id === selectedClient.id) {
-                const updatedClient = { ...c, purchases: [...c.purchases] };
-                const newPurchase: Purchase = {
-                    id: crypto.randomUUID(),
-                    item: data.item,
-                    totalValue: data.amount,
-                    date: new Date().toISOString(),
-                    installments: [],
-                };
-
-                const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
-                const installmentValue = data.amount / installmentsCount;
-
-                for (let i = 1; i <= installmentsCount; i++) {
-                    const dueDateValue = data.installmentDueDates?.[i-1]?.value;
-                    const dueDate = dueDateValue
-                                  ? new Date(dueDateValue + 'T00:00:00') 
-                                  : addMonths(new Date(), i);
-                    newPurchase.installments.push({
-                        id: crypto.randomUUID(),
-                        installmentNumber: i,
-                        value: installmentValue,
-                        dueDate: dueDate.toISOString(),
-                        status: 'pending',
-                    });
-                }
-                
-                updatedClient.purchases.push(newPurchase);
-                if (selectedClient && selectedClient.id === updatedClient.id) {
-                    setSelectedClient(updatedClient);
-                }
-                updateProductStock(data.item, 1, updatedClient.name, installmentValue);
-                return updatedClient;
-            }
-            return c;
-        })
+      prev.map(c => {
+        if (c.id === selectedClient.id) {
+          const updatedClient = { ...c, purchases: [...c.purchases] };
+          const newPurchase: Purchase = {
+            id: crypto.randomUUID(),
+            item: data.item,
+            totalValue: data.amount,
+            date: new Date().toISOString(),
+            installments: [],
+          };
+  
+          const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
+          const installmentValue = data.amount / installmentsCount;
+          const intervalDays = data.installmentInterval || 30;
+  
+          for (let i = 0; i < installmentsCount; i++) {
+            const dueDate = addDays(new Date(), (i + 1) * intervalDays);
+            newPurchase.installments.push({
+              id: crypto.randomUUID(),
+              installmentNumber: i + 1,
+              value: installmentValue,
+              dueDate: dueDate.toISOString(),
+              status: 'pending',
+            });
+          }
+  
+          updatedClient.purchases.push(newPurchase);
+          if (selectedClient && selectedClient.id === updatedClient.id) {
+            setSelectedClient(updatedClient);
+          }
+          updateProductStock(data.item, 1, updatedClient.name, installmentValue);
+          return updatedClient;
+        }
+        return c;
+      })
     );
     toast({ title: 'Sucesso!', description: 'Nova compra registrada.', className: 'bg-accent text-accent-foreground' });
-};
+  };
 
   
   const handlePayInstallment = (clientId: string, purchaseId: string, installmentId: string) => {

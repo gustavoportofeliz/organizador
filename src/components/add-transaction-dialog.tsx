@@ -33,7 +33,7 @@ const formSchema = z.object({
   amount: z.coerce.number().min(0.01, { message: 'O valor deve ser maior que zero.' }),
   splitPurchase: z.boolean().default(false),
   installments: z.coerce.number().min(1).max(6).optional(),
-  installmentDueDates: z.array(z.object({ value: z.string().optional() })).optional(),
+  installmentInterval: z.coerce.number().min(1).optional().default(30),
 });
 
 export type AddTransactionFormValues = z.infer<typeof formSchema>;
@@ -60,29 +60,16 @@ export function AddTransactionDialog({
       item: '',
       splitPurchase: false,
       installments: 1,
-      installmentDueDates: [],
+      installmentInterval: 30,
     }
   });
 
   const { watch, reset, control } = form;
   const splitPurchase = watch('splitPurchase');
-  const installments = watch('installments');
-
-  const { fields, replace } = useFieldArray({
-    control,
-    name: "installmentDueDates",
-  });
 
   useEffect(() => {
-    reset({ amount: 0, item: '', splitPurchase: false, installments: 1, installmentDueDates: [] });
+    reset({ amount: 0, item: '', splitPurchase: false, installments: 1, installmentInterval: 30 });
   }, [open, reset]);
-
-  // Sync the due date fields with the number of installments
-  React.useEffect(() => {
-    const newFields = Array.from({ length: installments || 0 }, () => ({ value: '' }));
-    replace(newFields);
-  }, [installments, replace]);
-
 
   const onSubmit = (data: AddTransactionFormValues) => {
     onAddTransaction(data);
@@ -158,45 +145,44 @@ export function AddTransactionDialog({
               <Label htmlFor="split-purchase-transaction">Dividir compra em parcelas</Label>
             </div>
             {splitPurchase && (
-                <FormField
-                  control={control}
-                  name="installments"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Número de Parcelas</FormLabel>
-                      <Select onValueChange={(value) => field.onChange(parseInt(value, 10))} defaultValue={String(field.value)}>
-                          <FormControl>
-                              <SelectTrigger>
-                                  <SelectValue placeholder="Selecione o número de parcelas" />
-                              </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                              {[...Array(6)].map((_, i) => (
-                                  <SelectItem key={i + 1} value={String(i + 1)}>{i + 1}x</SelectItem>
-                              ))}
-                          </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                    control={control}
+                    name="installments"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Número de Parcelas</FormLabel>
+                        <Select onValueChange={(value) => field.onChange(parseInt(value, 10))} defaultValue={String(field.value)}>
+                            <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione o número de parcelas" />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                {[...Array(6)].map((_, i) => (
+                                    <SelectItem key={i + 1} value={String(i + 1)}>{i + 1}x</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                     <FormField
+                        control={control}
+                        name="installmentInterval"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Intervalo (dias)</FormLabel>
+                            <FormControl>
+                            <Input type="number" step="1" placeholder="30" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                </div>
             )}
-            {splitPurchase && fields.map((field, index) => (
-              <FormField
-                key={field.id}
-                control={control}
-                name={`installmentDueDates.${index}.value`}
-                render={({ field: dateField }) => (
-                  <FormItem>
-                    <FormLabel>Vencimento Parcela {index + 1}</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...dateField} value={dateField.value || ''} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ))}
             <DialogFooter>
               <Button type="submit" className="bg-accent hover:bg-accent/90 text-accent-foreground">
                 Registrar Compra

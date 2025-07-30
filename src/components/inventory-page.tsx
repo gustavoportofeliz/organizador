@@ -16,6 +16,9 @@ import {
   PlusCircle,
   Search,
   Package,
+  MoreVertical,
+  Edit,
+  Trash2,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -25,6 +28,14 @@ import {
     AccordionTrigger,
 } from "@/components/ui/accordion";
 import { AddProductDialog, type AddProductFormValues } from '@/components/add-product-dialog';
+import { EditProductDialog, type EditProductFormValues } from '@/components/edit-product-dialog';
+import { DeleteProductConfirmationDialog } from '@/components/delete-product-confirmation-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
   
 const formatCurrency = (amount: number) => {
@@ -49,6 +60,9 @@ export function InventoryPage() {
     const [products, setProducts] = useState<Product[]>([]);
     const [isClientMounted, setIsClientMounted] = useState(false);
     const [isAddProductOpen, setAddProductOpen] = useState(false);
+    const [isEditProductOpen, setEditProductOpen] = useState(false);
+    const [isDeleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const { toast } = useToast();
 
@@ -72,24 +86,11 @@ export function InventoryPage() {
         const existingProductIndex = products.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
         const existingProduct = products[existingProductIndex];
         
-        // --- Validations ---
-        if (isNewProduct) {
-            if (type === 'sale') {
-                toast({ variant: 'destructive', title: 'Erro!', description: 'Não é possível vender um produto que não existe no estoque.' });
-                return;
-            }
-            if (existingProductIndex !== -1) {
-                toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${name}" já existe. Use a seleção de produto para movimentá-lo.` });
-                return;
-            }
-        } else {
-            if (existingProductIndex === -1) {
-                toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${name}" não foi encontrado.` });
-                return;
-            }
+        if (type === 'sale' && !existingProduct) {
+             toast({ variant: 'destructive', title: 'Erro!', description: 'Não é possível vender um produto que não existe no estoque.' });
+             return;
         }
-        // --- End of validations ---
-        
+
         const newHistoryEntry: ProductHistoryEntry = {
             id: crypto.randomUUID(),
             date: new Date().toISOString(),
@@ -126,7 +127,35 @@ export function InventoryPage() {
             }
         });
     };
+
+    const handleEditProduct = (data: EditProductFormValues) => {
+        if (!selectedProduct) return;
+        setProducts(prev => 
+          prev.map(p => 
+            p.id === selectedProduct.id ? { ...p, name: data.name } : p
+          )
+        );
+        toast({ title: 'Sucesso!', description: 'Nome do produto atualizado.', className: 'bg-accent text-accent-foreground' });
+        setEditProductOpen(false);
+    };
+
+    const handleDeleteProduct = () => {
+        if (!selectedProduct) return;
+        setProducts(prev => prev.filter(p => p.id !== selectedProduct.id));
+        toast({ title: 'Sucesso!', description: 'Produto removido.', className: 'bg-destructive text-destructive-foreground' });
+        setDeleteConfirmOpen(false);
+    };
     
+    const openEditDialog = (product: Product) => {
+        setSelectedProduct(product);
+        setEditProductOpen(true);
+    };
+      
+    const openDeleteDialog = (product: Product) => {
+        setSelectedProduct(product);
+        setDeleteConfirmOpen(true);
+    };
+
     const filteredProducts = useMemo(() => {
         return products.map(product => {
             const totalSales = product.history
@@ -140,7 +169,13 @@ export function InventoryPage() {
         }).filter(product => {
             const search = searchTerm.toLowerCase();
             return product.name.toLowerCase().includes(search);
-        }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        }).sort((a, b) => {
+            // Prioritize negative stock
+            if (a.quantity < 0 && b.quantity >= 0) return -1;
+            if (b.quantity < 0 && a.quantity >= 0) return 1;
+            // Then sort by most recent
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        });
     }, [products, searchTerm]);
 
     if (!isClientMounted) {
@@ -198,17 +233,35 @@ export function InventoryPage() {
                     <div className="overflow-x-auto">
                         <Accordion type="multiple" className="w-full">
                             {filteredProducts.map(product => (
-                                <AccordionItem value={product.id} key={product.id}>
+                                <AccordionItem value={product.id} key={product.id} className={cn(product.quantity < 0 && 'bg-red-50 dark:bg-red-900/20')}>
                                     <AccordionTrigger>
                                         <div className="flex justify-between w-full pr-4 items-center">
                                             <span className="font-medium text-lg">{product.name}</span>
-                                            <div className="flex items-center gap-6 text-sm">
+                                            <div className="flex items-center gap-4 text-sm">
                                                 <span className="text-muted-foreground">
                                                     Saldo: <span className={cn('font-bold', product.balance >= 0 ? 'text-green-600' : 'text-red-600')}>{formatCurrency(product.balance)}</span>
                                                 </span>
                                                 <span className="text-muted-foreground">
-                                                    Quantidade: <span className="font-bold text-foreground">{product.quantity}</span>
+                                                    Quantidade: <span className={cn('font-bold', product.quantity > 0 ? 'text-green-600' : 'text-red-600')}>{product.quantity}</span>
                                                 </span>
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="ghost" className="h-8 w-8 p-0">
+                                                        <span className="sr-only">Abrir menu</span>
+                                                        <MoreVertical className="h-4 w-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditDialog(product); }}>
+                                                            <Edit className="mr-2 h-4 w-4" />
+                                                            <span>Editar</span>
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openDeleteDialog(product); }} className="text-destructive focus:text-destructive">
+                                                            <Trash2 className="mr-2 h-4 w-4" />
+                                                            <span>Excluir</span>
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
                                             </div>
                                         </div>
                                     </AccordionTrigger>
@@ -264,6 +317,18 @@ export function InventoryPage() {
                 onOpenChange={setAddProductOpen}
                 onAddProduct={handleAddProduct}
                 products={products}
+            />
+            <EditProductDialog
+                open={isEditProductOpen}
+                onOpenChange={setEditProductOpen}
+                onEditProduct={handleEditProduct}
+                product={selectedProduct}
+            />
+            <DeleteProductConfirmationDialog
+                open={isDeleteConfirmOpen}
+                onOpenChange={setDeleteConfirmOpen}
+                onConfirm={handleDeleteProduct}
+                productName={selectedProduct?.name}
             />
         </div>
     )

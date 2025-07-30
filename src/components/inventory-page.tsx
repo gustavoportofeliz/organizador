@@ -67,65 +67,70 @@ export function InventoryPage() {
     }, [products, isClientMounted]);
 
     const handleAddProduct = (data: AddProductFormValues) => {
-      const { name, quantity, unitPrice, type, isNewProduct } = data;
-    
-      const newHistoryEntry: ProductHistoryEntry = {
-        id: crypto.randomUUID(),
-        date: new Date().toISOString(),
-        type: type,
-        quantity: quantity,
-        unitPrice: unitPrice,
-        notes: type === 'purchase' ? 'Compra de estoque' : 'Venda manual',
-      };
-    
-      setProducts(prevProducts => {
-          const existingProductIndex = prevProducts.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
-          
-          if (isNewProduct) {
-              if (type === 'sale') {
-                  toast({ variant: 'destructive', title: 'Erro!', description: 'Não é possível vender um produto que não existe.' });
-                  return prevProducts;
-              }
-              if (existingProductIndex !== -1) {
-                  toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${name}" já existe. Use a seleção de produto.` });
-                  return prevProducts;
-              }
-              const newProduct: Product = {
-                id: crypto.randomUUID(),
-                name: name,
-                quantity: quantity,
-                history: [newHistoryEntry],
-                createdAt: new Date().toISOString(),
-              };
-              toast({ title: 'Sucesso!', description: 'Novo produto adicionado.', className: 'bg-accent text-accent-foreground' });
-              return [newProduct, ...prevProducts];
-          } else {
-              if (existingProductIndex === -1) {
-                 toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${name}" não encontrado.` });
-                 return prevProducts;
-              }
-              
-              const updatedProducts = [...prevProducts];
-              const productToUpdate = { ...updatedProducts[existingProductIndex] };
-
-              if (type === 'sale' && productToUpdate.quantity < quantity) {
-                  toast({ variant: 'destructive', title: 'Erro!', description: `Estoque insuficiente para "${name}".` });
-                  return prevProducts;
-              }
-
-              productToUpdate.quantity = type === 'purchase' 
-                  ? productToUpdate.quantity + quantity 
-                  : productToUpdate.quantity - quantity;
-              
-              productToUpdate.history = [newHistoryEntry, ...productToUpdate.history];
-              updatedProducts[existingProductIndex] = productToUpdate;
-              
-              toast({ title: 'Sucesso!', description: 'Movimentação registrada.', className: 'bg-accent text-accent-foreground' });
-              return updatedProducts;
-          }
-      });
+        const { name, quantity, unitPrice, type, isNewProduct } = data;
+        
+        const existingProductIndex = products.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
+        const existingProduct = products[existingProductIndex];
+        
+        // --- Validations moved here ---
+        if (isNewProduct) {
+            if (type === 'sale') {
+                toast({ variant: 'destructive', title: 'Erro!', description: 'Não é possível vender um produto que não existe no estoque.' });
+                return;
+            }
+            if (existingProductIndex !== -1) {
+                toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${name}" já existe. Use a seleção de produto para movimentá-lo.` });
+                return;
+            }
+        } else {
+            if (existingProductIndex === -1) {
+                toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${name}" não foi encontrado.` });
+                return;
+            }
+            if (type === 'sale' && existingProduct.quantity < quantity) {
+                toast({ variant: 'destructive', title: 'Erro!', description: `Estoque insuficiente para "${name}".` });
+                return;
+            }
+        }
+        // --- End of validations ---
+        
+        const newHistoryEntry: ProductHistoryEntry = {
+            id: crypto.randomUUID(),
+            date: new Date().toISOString(),
+            type: type,
+            quantity: quantity,
+            unitPrice: unitPrice,
+            notes: type === 'purchase' ? 'Compra de estoque' : 'Venda manual',
+        };
+        
+        setProducts(prevProducts => {
+            if (isNewProduct) {
+                const newProduct: Product = {
+                    id: crypto.randomUUID(),
+                    name: name,
+                    quantity: quantity,
+                    history: [newHistoryEntry],
+                    createdAt: new Date().toISOString(),
+                };
+                toast({ title: 'Sucesso!', description: 'Novo produto adicionado.', className: 'bg-accent text-accent-foreground' });
+                return [newProduct, ...prevProducts];
+            } else {
+                const updatedProducts = [...prevProducts];
+                const productToUpdate = { ...updatedProducts[existingProductIndex] };
+                
+                productToUpdate.quantity = type === 'purchase' 
+                    ? productToUpdate.quantity + quantity 
+                    : productToUpdate.quantity - quantity;
+                
+                productToUpdate.history = [newHistoryEntry, ...productToUpdate.history];
+                updatedProducts[existingProductIndex] = productToUpdate;
+                
+                toast({ title: 'Sucesso!', description: 'Movimentação registrada.', className: 'bg-accent text-accent-foreground' });
+                return updatedProducts;
+            }
+        });
     };
-
+    
     const filteredProducts = useMemo(() => {
         return products.map(product => {
             const totalSales = product.history

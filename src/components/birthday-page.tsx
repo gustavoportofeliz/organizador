@@ -72,7 +72,7 @@ export function BirthdayPage() {
         clients.forEach(client => {
             if (client.birthDate) {
                 people.push({
-                    id: client.id,
+                    id: `client-${client.id}`,
                     name: client.name,
                     birthDate: client.birthDate,
                     isRelative: false,
@@ -81,7 +81,7 @@ export function BirthdayPage() {
             if (client.relatives) {
                 client.relatives.forEach(relative => {
                     people.push({
-                        id: relative.id,
+                        id: `relative-${relative.id}`,
                         name: relative.name,
                         birthDate: relative.birthDate,
                         isRelative: true,

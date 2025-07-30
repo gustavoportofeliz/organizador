@@ -131,17 +131,19 @@ export function BirthdayPage() {
                                 <CardDescription>{client.birthDate ? parseDate(client.birthDate)?.toLocaleDateString('pt-BR') : 'Data inválida'}</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div className="flex items-center space-x-2">
-                                     <Gift className={cn("h-5 w-5", {
-                                        'text-yellow-600': client.status === 'month',
-                                        'text-red-600': client.status === 'week',
-                                        'text-green-600': client.status === 'today',
-                                        'text-muted-foreground': client.status === 'default',
-                                    })} />
-                                    <span>
-                                        {getDaysUntilText(client.daysUntilBirthday, client.nextBirthday)}
-                                    </span>
-                                </div>
+                                {client.status !== 'default' && (
+                                    <div className="flex items-center space-x-2">
+                                        <Gift className={cn("h-5 w-5", {
+                                            'text-yellow-600': client.status === 'month',
+                                            'text-red-600': client.status === 'week',
+                                            'text-green-600': client.status === 'today',
+                                            'text-muted-foreground': client.status === 'default',
+                                        })} />
+                                        <span>
+                                            {getDaysUntilText(client.daysUntilBirthday, client.nextBirthday)}
+                                        </span>
+                                    </div>
+                                )}
                             </CardContent>
                            
                             {client.status === 'week' && (

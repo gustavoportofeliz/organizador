@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -22,27 +22,28 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useEffect } from 'react';
-import type { Client } from '@/lib/types';
+import type { Client, Product } from '@/lib/types';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import React from 'react';
 
 const formSchema = z.object({
   item: z.string().min(1, { message: 'A descrição é obrigatória.' }),
   amount: z.coerce.number().min(0.01, { message: 'O valor deve ser maior que zero.' }),
   splitPurchase: z.boolean().default(false),
   installments: z.coerce.number().min(1).max(6).optional(),
+  installmentDueDates: z.array(z.string().optional()).optional(),
 });
 
-export type AddTransactionFormValues = z.infer<typeof formSchema> & {
-  installmentDueDates?: (string | undefined)[];
-};
+export type AddTransactionFormValues = z.infer<typeof formSchema>;
 
 interface AddTransactionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAddTransaction: (data: AddTransactionFormValues) => void;
   client: Client | null;
+  products: Product[];
 }
 
 export function AddTransactionDialog({
@@ -50,25 +51,40 @@ export function AddTransactionDialog({
   onOpenChange,
   onAddTransaction,
   client,
+  products
 }: AddTransactionDialogProps) {
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<AddTransactionFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       amount: 0,
       item: '',
       splitPurchase: false,
       installments: 1,
+      installmentDueDates: [],
     }
   });
 
   const { watch, reset, control } = form;
   const splitPurchase = watch('splitPurchase');
+  const installments = watch('installments');
+
+  const { fields, replace } = useFieldArray({
+    control,
+    name: "installmentDueDates",
+  });
 
   useEffect(() => {
-    reset({ amount: 0, item: '', splitPurchase: false, installments: 1 });
+    reset({ amount: 0, item: '', splitPurchase: false, installments: 1, installmentDueDates: [] });
   }, [open, reset]);
 
-  const onSubmit = (data: z.infer<typeof formSchema>) => {
+  // Sync the due date fields with the number of installments
+  React.useEffect(() => {
+    const newFields = Array.from({ length: installments || 0 }, () => '');
+    replace(newFields.map(v => ({ value: v })));
+  }, [installments, replace]);
+
+
+  const onSubmit = (data: AddTransactionFormValues) => {
     onAddTransaction(data);
     onOpenChange(false);
   };
@@ -77,7 +93,7 @@ export function AddTransactionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Adicionar Compra para {client.name}</DialogTitle>
           <DialogDescription>
@@ -85,16 +101,27 @@ export function AddTransactionDialog({
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4  max-h-[70vh] overflow-y-auto pr-4">
             <FormField
               control={control}
               name="item"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Descrição da Compra</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ex: Produto Y" {...field} />
-                  </FormControl>
+                   <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Selecione um produto do estoque" />
+                            </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            {products.map((product) => (
+                                <SelectItem key={product.id} value={product.name} disabled={product.quantity === 0}>
+                                    {product.name} (Estoque: {product.quantity})
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                   <FormMessage />
                 </FormItem>
               )}
@@ -106,7 +133,7 @@ export function AddTransactionDialog({
                 <FormItem>
                   <FormLabel>Valor da Compra (R$)</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="0.00" {...field} />
+                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -154,6 +181,22 @@ export function AddTransactionDialog({
                   )}
                 />
             )}
+            {splitPurchase && fields.map((field, index) => (
+              <FormField
+                key={field.id}
+                control={control}
+                name={`installmentDueDates.${index}`}
+                render={({ field: dateField }) => (
+                  <FormItem>
+                    <FormLabel>Vencimento Parcela {index + 1}</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...dateField} value={dateField.value || ''} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ))}
             <DialogFooter>
               <Button type="submit" className="bg-accent hover:bg-accent/90 text-accent-foreground">
                 Registrar Compra
@@ -165,5 +208,3 @@ export function AddTransactionDialog({
     </Dialog>
   );
 }
-
-    

@@ -39,6 +39,8 @@ const formatDate = (dateString: string) => {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
     });
 }
 
@@ -161,6 +163,7 @@ export function InventoryPage() {
                                                 <TableRow>
                                                     <TableHead>Data</TableHead>
                                                     <TableHead>Tipo</TableHead>
+                                                    <TableHead>Cliente</TableHead>
                                                     <TableHead>Quantidade</TableHead>
                                                     <TableHead className="text-right">Valor Unitário</TableHead>
                                                 </TableRow>
@@ -168,7 +171,7 @@ export function InventoryPage() {
                                             <TableBody>
                                                 {product.history.length === 0 ? (
                                                     <TableRow>
-                                                        <TableCell colSpan={4} className="text-center text-muted-foreground">
+                                                        <TableCell colSpan={5} className="text-center text-muted-foreground">
                                                             Nenhuma movimentação registrada.
                                                         </TableCell>
                                                     </TableRow>
@@ -181,6 +184,7 @@ export function InventoryPage() {
                                                                 {entry.type === 'purchase' ? 'Compra' : 'Venda'}
                                                             </span>
                                                         </TableCell>
+                                                        <TableCell>{entry.clientName || '-'}</TableCell>
                                                         <TableCell>{entry.quantity}</TableCell>
                                                         <TableCell className="text-right">{formatCurrency(entry.unitPrice)}</TableCell>
                                                     </TableRow>

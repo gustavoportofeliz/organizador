@@ -19,7 +19,8 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-const getMonthYear = (dateString: string) => {
+const getMonthYear = (dateString?: string) => {
+    if(!dateString) return 'Data inválida';
     const date = new Date(dateString);
     return date.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
 }
@@ -40,36 +41,52 @@ export function RevenuePage() {
         const data: { 
             [key: string]: { 
                 paid: number; 
-                details: { client: string; value: number; status: string }[] 
+                details: { client: string; value: number; status: string, paidDate?: string }[] 
             } 
         } = {};
 
         clients.forEach(client => {
             client.purchases.forEach(purchase => {
                 purchase.installments.forEach(installment => {
-                    const monthYear = getMonthYear(installment.dueDate);
+                    const monthYear = getMonthYear(installment.paidDate || installment.dueDate);
                     if (!data[monthYear]) {
                         data[monthYear] = { paid: 0, details: [] };
                     }
-                    if (installment.status === 'paid') {
-                        data[monthYear].paid += installment.value;
+                    if (installment.status === 'paid' && installment.paidDate) {
+                       const paidMonthYear = getMonthYear(installment.paidDate);
+                       if (!data[paidMonthYear]) {
+                           data[paidMonthYear] = { paid: 0, details: [] };
+                       }
+                       data[paidMonthYear].paid += installment.value;
+                       data[paidMonthYear].details.push({
+                            client: client.name,
+                            value: installment.value,
+                            status: 'Quitado',
+                            paidDate: installment.paidDate
+                        });
+                    } else {
+                        // Add non-paid items to their due date month for context
+                        const dueMonthYear = getMonthYear(installment.dueDate);
+                        if (!data[dueMonthYear]) {
+                            data[dueMonthYear] = { paid: 0, details: [] };
+                        }
+                        data[dueMonthYear].details.push({
+                            client: client.name,
+                            value: installment.value,
+                            status: installment.status === 'overdue' ? 'Vencido' : 'Pendente'
+                        });
                     }
-                    
-                    data[monthYear].details.push({
-                        client: client.name,
-                        value: installment.value,
-                        status: installment.status === 'paid' 
-                            ? 'Quitado' 
-                            : installment.status === 'overdue' 
-                            ? 'Vencido' 
-                            : 'Pendente'
-                    });
                 });
             });
         });
         
         // Sort months in ascending order (oldest first)
-        return Object.entries(data).sort(([a], [b]) => new Date(a.split(' de ')[1], getMonthIndex(a.split(' de ')[0])).getTime() - new Date(b.split(' de ')[1], getMonthIndex(b.split(' de ')[0])).getTime());
+        return Object.entries(data)
+            .sort(([a], [b]) => {
+                const [monthA, yearA] = a.split(' de ');
+                const [monthB, yearB] = b.split(' de ');
+                return new Date(parseInt(yearA), getMonthIndex(monthA)).getTime() - new Date(parseInt(yearB), getMonthIndex(monthB)).getTime();
+            });
 
     }, [clients]);
 
@@ -136,7 +153,7 @@ export function RevenuePage() {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {data.details.map((detail, index) => (
+                                            {data.details.sort((a,b) => a.client.localeCompare(b.client)).map((detail, index) => (
                                                 <TableRow key={index}>
                                                     <TableCell>{detail.client}</TableCell>
                                                     <TableCell>

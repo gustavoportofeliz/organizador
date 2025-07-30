@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import type { Client, Purchase } from '@/lib/types';
+import type { Client, Purchase, Product, ProductHistoryEntry } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -38,7 +38,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { addMonths } from 'date-fns';
+import { addMonths, format, parseISO } from 'date-fns';
 
 
 const initialClientsData: Client[] = [];
@@ -52,6 +52,7 @@ const formatCurrency = (amount: number) => {
 
 export function ClientPage() {
   const [clients, setClients] = useState<Client[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [isClientMounted, setIsClientMounted] = useState(false);
   const [isAddClientOpen, setAddClientOpen] = useState(false);
   const [isAddTransactionOpen, setAddTransactionOpen] = useState(false);
@@ -71,9 +72,13 @@ export function ClientPage() {
         ...purchase,
         installments: purchase.installments.map(inst => {
           if (inst.status === 'paid') return inst;
-          const dueDate = new Date(inst.dueDate);
-          if (now > dueDate) {
-            return { ...inst, status: 'overdue' };
+          try {
+            const dueDate = parseISO(inst.dueDate);
+            if (now > dueDate) {
+              return { ...inst, status: 'overdue' };
+            }
+          } catch(e) {
+             // Ignore invalid date formats during checks
           }
           return inst;
         })
@@ -84,6 +89,10 @@ export function ClientPage() {
   useEffect(() => {
     const storedClients = localStorage.getItem('clients');
     const initialClients = storedClients ? JSON.parse(storedClients) : initialClientsData;
+    const storedProducts = localStorage.getItem('products');
+    if (storedProducts) {
+        setProducts(JSON.parse(storedProducts));
+    }
     setClients(updateInstallmentStatuses(initialClients));
     setIsClientMounted(true);
   }, [updateInstallmentStatuses]);
@@ -91,12 +100,13 @@ export function ClientPage() {
   useEffect(() => {
     if(isClientMounted) {
       localStorage.setItem('clients', JSON.stringify(clients));
+      localStorage.setItem('products', JSON.stringify(products));
       const interval = setInterval(() => {
         setClients(prevClients => updateInstallmentStatuses(prevClients));
       }, 60000); // Check for overdue installments every minute
       return () => clearInterval(interval);
     }
-  }, [clients, isClientMounted, updateInstallmentStatuses]);
+  }, [clients, products, isClientMounted, updateInstallmentStatuses]);
 
 
   const totalOutstandingBalance = useMemo(() => {
@@ -125,36 +135,32 @@ export function ClientPage() {
       payments: [],
     };
 
-    if (data.purchaseValue && data.purchaseValue > 0) {
+    if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
         const newPurchase: Purchase = {
             id: crypto.randomUUID(),
-            item: data.purchaseItem || 'Compra inicial',
+            item: data.purchaseItem,
             totalValue: data.purchaseValue,
             date: new Date().toISOString(),
             installments: [],
         };
+        
+        const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
+        const installmentValue = data.purchaseValue / installmentsCount;
 
-        if (data.splitPurchase && data.installments && data.installments > 1) {
-            const installmentValue = data.purchaseValue / data.installments;
-            for (let i = 1; i <= data.installments; i++) {
-                newPurchase.installments.push({
-                    id: crypto.randomUUID(),
-                    installmentNumber: i,
-                    value: installmentValue,
-                    dueDate: addMonths(new Date(), i).toISOString(),
-                    status: 'pending',
-                });
-            }
-        } else {
+        for (let i = 1; i <= installmentsCount; i++) {
+            const dueDate = data.installmentDueDates && data.installmentDueDates[i-1] 
+                          ? new Date(data.installmentDueDates[i-1] + 'T00:00:00') 
+                          : addMonths(new Date(), i);
             newPurchase.installments.push({
                 id: crypto.randomUUID(),
-                installmentNumber: 1,
-                value: data.purchaseValue,
-                dueDate: addMonths(new Date(), 1).toISOString(),
+                installmentNumber: i,
+                value: installmentValue,
+                dueDate: dueDate.toISOString(),
                 status: 'pending',
             });
         }
         newClient.purchases.push(newPurchase);
+        updateProductStock(data.purchaseItem, 1, newClient.name, installmentValue);
     }
 
     if (data.paymentAmount && data.paymentAmount > 0) {
@@ -197,6 +203,40 @@ export function ClientPage() {
     setClients(prev => prev.filter(c => c.id !== selectedClient.id));
     toast({ title: 'Sucesso!', description: 'Cliente removido.', className: 'bg-destructive text-destructive-foreground' });
   };
+  
+  const updateProductStock = (productName: string, quantitySold: number, clientName: string, unitPrice: number) => {
+      setProducts(prevProducts => {
+          const productIndex = prevProducts.findIndex(p => p.name.toLowerCase() === productName.toLowerCase());
+          if (productIndex === -1) {
+              toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${productName}" não encontrado no estoque.` });
+              return prevProducts;
+          }
+
+          const updatedProducts = [...prevProducts];
+          const productToUpdate = { ...updatedProducts[productIndex] };
+
+          if (productToUpdate.quantity < quantitySold) {
+              toast({ variant: 'destructive', title: 'Erro!', description: `Estoque insuficiente para "${productName}".` });
+              return prevProducts;
+          }
+
+          productToUpdate.quantity -= quantitySold;
+          
+          const newHistoryEntry: ProductHistoryEntry = {
+              id: crypto.randomUUID(),
+              date: new Date().toISOString(),
+              type: 'sale',
+              quantity: quantitySold,
+              unitPrice: unitPrice, 
+              notes: `Venda para ${clientName}`,
+              clientName: clientName
+          };
+          productToUpdate.history = [newHistoryEntry, ...productToUpdate.history];
+          
+          updatedProducts[productIndex] = productToUpdate;
+          return updatedProducts;
+      });
+  }
 
   const handleAddTransaction = (data: AddTransactionFormValues) => {
     if (!selectedClient) return;
@@ -204,7 +244,7 @@ export function ClientPage() {
     setClients(prev =>
         prev.map(c => {
             if (c.id === selectedClient.id) {
-                const updatedClient = { ...c, purchases: [...c.purchases] }; // Deep copy purchases
+                const updatedClient = { ...c, purchases: [...c.purchases] };
                 const newPurchase: Purchase = {
                     id: crypto.randomUUID(),
                     item: data.item,
@@ -217,11 +257,14 @@ export function ClientPage() {
                 const installmentValue = data.amount / installmentsCount;
 
                 for (let i = 1; i <= installmentsCount; i++) {
+                    const dueDate = data.installmentDueDates && data.installmentDueDates[i-1] 
+                                  ? new Date(data.installmentDueDates[i-1] + 'T00:00:00') 
+                                  : addMonths(new Date(), i);
                     newPurchase.installments.push({
                         id: crypto.randomUUID(),
                         installmentNumber: i,
                         value: installmentValue,
-                        dueDate: addMonths(new Date(), i).toISOString(),
+                        dueDate: dueDate.toISOString(),
                         status: 'pending',
                     });
                 }
@@ -230,6 +273,7 @@ export function ClientPage() {
                 if (selectedClient && selectedClient.id === updatedClient.id) {
                     setSelectedClient(updatedClient);
                 }
+                updateProductStock(data.item, 1, updatedClient.name, installmentValue);
                 return updatedClient;
             }
             return c;
@@ -245,13 +289,14 @@ export function ClientPage() {
         if (client.id === clientId) {
           const newClient = { ...client };
           let paidAmount = 0;
+          let paidDate = new Date().toISOString();
           newClient.purchases = newClient.purchases.map(purchase => {
             if (purchase.id === purchaseId) {
               const newPurchase = { ...purchase };
               newPurchase.installments = newPurchase.installments.map(inst => {
                 if (inst.id === installmentId && inst.status !== 'paid') {
                   paidAmount = inst.value;
-                  return { ...inst, status: 'paid', paidDate: new Date().toISOString() };
+                  return { ...inst, status: 'paid', paidDate: paidDate };
                 }
                 return inst;
               });
@@ -264,7 +309,7 @@ export function ClientPage() {
             newClient.payments.push({
                 id: crypto.randomUUID(),
                 amount: paidAmount,
-                date: new Date().toISOString(),
+                date: paidDate,
                 installmentId: installmentId,
             });
           }
@@ -438,12 +483,14 @@ export function ClientPage() {
         open={isAddClientOpen}
         onOpenChange={setAddClientOpen}
         onAddClient={handleAddClient}
+        products={products}
       />
       <AddTransactionDialog
         open={isAddTransactionOpen}
         onOpenChange={setAddTransactionOpen}
         onAddTransaction={handleAddTransaction}
         client={selectedClient}
+        products={products}
       />
        <ViewHistoryDialog
         open={isViewHistoryOpen}

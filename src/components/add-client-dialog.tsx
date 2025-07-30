@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -21,10 +21,11 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, Calendar as CalendarIcon, Trash2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { Product } from '@/lib/types';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Nome deve ter pelo menos 2 caracteres.' }),
@@ -39,20 +40,20 @@ const formSchema = z.object({
   paymentAmount: z.coerce.number().min(0).optional().default(0),
   splitPurchase: z.boolean().default(false),
   installments: z.coerce.number().min(1).max(6).optional(),
+  installmentDueDates: z.array(z.string().optional()).optional(),
 });
 
-export type AddClientFormValues = z.infer<typeof formSchema> & {
-  installmentDueDates?: (string | undefined)[];
-};
+export type AddClientFormValues = z.infer<typeof formSchema>;
 
 interface AddClientDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAddClient: (data: AddClientFormValues) => void;
+  products: Product[];
 }
 
-export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDialogProps) {
-  const form = useForm<z.infer<typeof formSchema>>({
+export function AddClientDialog({ open, onOpenChange, onAddClient, products }: AddClientDialogProps) {
+  const form = useForm<AddClientFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
@@ -67,13 +68,26 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
       paymentAmount: 0,
       splitPurchase: false,
       installments: 1,
+      installmentDueDates: [],
     },
   });
 
-  const { watch } = form;
+  const { watch, control, setValue } = form;
   const splitPurchase = watch('splitPurchase');
+  const installments = watch('installments');
 
-  const onSubmit = (data: z.infer<typeof formSchema>) => {
+  const { fields, replace } = useFieldArray({
+    control,
+    name: "installmentDueDates",
+  });
+
+  // Sync the due date fields with the number of installments
+  React.useEffect(() => {
+    const newFields = Array.from({ length: installments || 0 }, () => '');
+    replace(newFields.map(v => ({ value: v })));
+  }, [installments, replace]);
+
+  const onSubmit = (data: AddClientFormValues) => {
     onAddClient(data);
     onOpenChange(false);
     form.reset();
@@ -86,7 +100,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
       }
       onOpenChange(isOpen);
     }}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Adicionar Novo Cliente</DialogTitle>
           <DialogDescription>
@@ -96,7 +110,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 max-h-[70vh] overflow-y-auto pr-4">
             <FormField
-              control={form.control}
+              control={control}
               name="name"
               render={({ field }) => (
                 <FormItem>
@@ -109,7 +123,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
               )}
             />
              <FormField
-              control={form.control}
+              control={control}
               name="phone"
               render={({ field }) => (
                 <FormItem>
@@ -122,20 +136,20 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
               )}
             />
             <FormField
-              control={form.control}
+              control={control}
               name="birthDate"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Data de Nascimento</FormLabel>
                   <FormControl>
-                    <Input placeholder="DD/MM/AAAA" {...field} />
+                    <Input type="date" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <FormField
-              control={form.control}
+              control={control}
               name="address"
               render={({ field }) => (
                 <FormItem>
@@ -148,7 +162,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
               )}
             />
             <FormField
-              control={form.control}
+              control={control}
               name="neighborhood"
               render={({ field }) => (
                 <FormItem>
@@ -161,52 +175,63 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
               )}
             />
             <FormField
-              control={form.control}
+              control={control}
               name="childrenInfo"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Filhos</FormLabel>
+                  <FormLabel>Filhos (quantidade)</FormLabel>
                   <FormControl>
-                    <Input placeholder="Nomes e idades" {...field} />
+                    <Input placeholder="Ex: 2" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <FormField
-              control={form.control}
+              control={control}
               name="preferences"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Gostos / Preferências</FormLabel>
+                  <FormLabel>Gostos / Preferências (Produto)</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: Cores, estilos, etc." {...field} />
+                    <Input placeholder="Ex: Camiseta Estampada" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <FormField
-              control={form.control}
+              control={control}
               name="purchaseItem"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Item da Compra (Opcional)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ex: Produto X" {...field} />
-                  </FormControl>
+                   <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Selecione um produto do estoque" />
+                            </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            {products.map((product) => (
+                                <SelectItem key={product.id} value={product.name}>
+                                    {product.name} (Estoque: {product.quantity})
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <FormField
-              control={form.control}
+              control={control}
               name="purchaseValue"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Valor da Compra (R$)</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="0.00" {...field} />
+                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -215,12 +240,13 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
 
             <div className="flex items-center space-x-2">
                 <FormField
-                    control={form.control}
+                    control={control}
                     name="splitPurchase"
                     render={({ field }) => (
                         <FormItem>
                              <FormControl>
                                 <Switch
+                                    id="split-purchase"
                                     checked={field.value}
                                     onCheckedChange={field.onChange}
                                 />
@@ -233,7 +259,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
 
             {splitPurchase && (
                  <FormField
-                    control={form.control}
+                    control={control}
                     name="installments"
                     render={({ field }) => (
                       <FormItem>
@@ -256,14 +282,32 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
                   />
             )}
 
+            {splitPurchase && fields.map((field, index) => (
+              <FormField
+                key={field.id}
+                control={control}
+                name={`installmentDueDates.${index}`}
+                render={({ field: dateField }) => (
+                  <FormItem>
+                    <FormLabel>Vencimento Parcela {index + 1}</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...dateField} value={dateField.value || ''} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ))}
+
+
             <FormField
-              control={form.control}
+              control={control}
               name="paymentAmount"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Valor do Pagamento Inicial (R$)</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="0.00" {...field} />
+                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

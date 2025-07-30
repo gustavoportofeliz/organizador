@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Gift } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { isToday, isFuture, differenceInDays } from 'date-fns';
+import { isToday, isFuture, differenceInDays, parse, isValid } from 'date-fns';
 
 export function BirthdayPage() {
     const [clients, setClients] = useState<Client[]>([]);
@@ -24,16 +24,19 @@ export function BirthdayPage() {
 
     const parseDate = (dateString?: string): Date | null => {
         if (!dateString) return null;
-        const parts = dateString.split('/');
-        if (parts.length === 3) {
-            // Assuming DD/MM/YYYY
-            const day = parseInt(parts[0], 10);
-            const month = parseInt(parts[1], 10) - 1;
-            const year = parseInt(parts[2], 10);
-            if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-                return new Date(year, month, day);
-            }
+        
+        // Handle YYYY-MM-DD from <input type="date">
+        let date = parse(dateString, 'yyyy-MM-dd', new Date());
+        if (isValid(date)) {
+            return date;
         }
+
+        // Handle DD/MM/YYYY for older data
+        date = parse(dateString, 'dd/MM/yyyy', new Date());
+        if(isValid(date)) {
+            return date;
+        }
+        
         return null;
     }
 
@@ -125,7 +128,7 @@ export function BirthdayPage() {
                         })}>
                             <CardHeader>
                                 <CardTitle>{client.name}</CardTitle>
-                                <CardDescription>{client.birthDate}</CardDescription>
+                                <CardDescription>{client.birthDate ? parseDate(client.birthDate)?.toLocaleDateString('pt-BR') : 'Data inválida'}</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 <div className="flex items-center space-x-2">

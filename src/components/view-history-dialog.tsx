@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import type { Client, Purchase, Installment } from '@/lib/types';
 import {
   Dialog,
@@ -38,7 +38,11 @@ const formatCurrency = (amount: number) => {
   
 const formatDate = (dateString: string) => {
     if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('pt-BR', {
+    // Handles both ISO strings and "YYYY-MM-DD"
+    const date = new Date(dateString);
+    // Add time to date to avoid timezone issues with date-only strings
+    const adjustedDate = new Date(date.valueOf() + date.getTimezoneOffset() * 60 * 1000);
+    return adjustedDate.toLocaleDateString('pt-BR', {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
@@ -48,11 +52,11 @@ const formatDate = (dateString: string) => {
 const getStatusBadge = (status: Installment['status']) => {
     switch (status) {
         case 'paid':
-            return <Badge className="bg-green-500 hover:bg-green-600 text-white capitalize">Quitado</Badge>;
+            return <Badge className="bg-green-600 hover:bg-green-700 text-white capitalize">Quitado</Badge>;
         case 'pending':
             return <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white capitalize">A Vencer</Badge>;
         case 'overdue':
-            return <Badge variant="destructive" className="capitalize">Vencido</Badge>;
+            return <Badge variant="destructive" className="capitalize bg-red-600 hover:bg-red-700">Vencido</Badge>;
         default:
             return null;
     }
@@ -60,24 +64,54 @@ const getStatusBadge = (status: Installment['status']) => {
 
 export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment }: ViewHistoryDialogProps) {
 
+  // Local state to reflect UI changes immediately
+  const [internalClient, setInternalClient] = useState(client);
+
+  useEffect(() => {
+    setInternalClient(client);
+  }, [client, open]);
+
+
   const sortedPurchases = useMemo(() => {
-    if (!client) return [];
-    return [...client.purchases].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [client]);
+    if (!internalClient) return [];
+    return [...internalClient.purchases].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [internalClient]);
 
   const handlePay = (purchaseId: string, installmentId: string) => {
     if (client) {
+      // Optimistic update
+      setInternalClient(prevClient => {
+          if (!prevClient) return null;
+          const newClient = { ...prevClient };
+          newClient.purchases = newClient.purchases.map(p => {
+              if (p.id === purchaseId) {
+                  return {
+                      ...p,
+                      installments: p.installments.map(i => {
+                          if (i.id === installmentId) {
+                              return { ...i, status: 'paid', paidDate: new Date().toISOString() };
+                          }
+                          return i;
+                      })
+                  };
+              }
+              return p;
+          });
+          return newClient;
+      });
+
+      // Call the actual update function
       onPayInstallment(client.id, purchaseId, installmentId);
     }
   }
 
-  if (!client) return null;
+  if (!internalClient) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Histórico de Transações de {client.name}</DialogTitle>
+          <DialogTitle>Histórico de Transações de {internalClient.name}</DialogTitle>
           <DialogDescription>
             Exibindo histórico completo de compras e pagamentos.
           </DialogDescription>
@@ -137,5 +171,3 @@ export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment
     </Dialog>
   );
 }
-
-    

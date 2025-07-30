@@ -51,10 +51,12 @@ export function EditClientDialog({ open, onOpenChange, onEditClient, client }: E
 
   useEffect(() => {
     if (client) {
+      // Format date to YYYY-MM-DD for the input type="date"
+      const birthDate = client.birthDate ? new Date(client.birthDate).toISOString().split('T')[0] : '';
       form.reset({
         name: client.name,
         phone: client.phone || '',
-        birthDate: client.birthDate || '',
+        birthDate: birthDate,
         address: client.address || '',
         neighborhood: client.neighborhood || '',
         childrenInfo: client.childrenInfo || '',
@@ -72,7 +74,7 @@ export function EditClientDialog({ open, onOpenChange, onEditClient, client }: E
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Editar Cliente</DialogTitle>
           <DialogDescription>
@@ -114,7 +116,7 @@ export function EditClientDialog({ open, onOpenChange, onEditClient, client }: E
                 <FormItem>
                   <FormLabel>Data de Nascimento</FormLabel>
                   <FormControl>
-                    <Input placeholder="DD/MM/AAAA" {...field} />
+                    <Input type="date" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -151,9 +153,9 @@ export function EditClientDialog({ open, onOpenChange, onEditClient, client }: E
               name="childrenInfo"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Filhos</FormLabel>
+                  <FormLabel>Filhos (quantidade)</FormLabel>
                   <FormControl>
-                    <Input placeholder="Nomes e idades" {...field} />
+                    <Input placeholder="Ex: 2" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -164,7 +166,7 @@ export function EditClientDialog({ open, onOpenChange, onEditClient, client }: E
               name="preferences"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Gostos / Preferências</FormLabel>
+                  <FormLabel>Gostos / Preferências (Produto)</FormLabel>
                   <FormControl>
                     <Input placeholder="Ex: Cores, estilos, etc." {...field} />
                   </FormControl>

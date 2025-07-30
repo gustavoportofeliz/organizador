@@ -29,8 +29,8 @@ export type Client = {
   birthDate?: string;
   address?: string;
   neighborhood?: string;
-  childrenInfo?: string;
-  preferences?: string;
+  childrenInfo?: string; // Alterado para texto para aceitar quantidade ou nomes
+  preferences?: string; // Mantido como texto para nomes de produtos
   purchases: Purchase[];
   payments: Payment[];
 };
@@ -42,6 +42,7 @@ export type ProductHistoryEntry = {
     quantity: number;
     unitPrice: number;
     notes?: string;
+    clientName?: string;
 }
 
 export type Product = {

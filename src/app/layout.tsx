@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
-import { SidebarProvider, Sidebar, SidebarTrigger, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarContent, SidebarHeader, SidebarInset } from '@/components/ui/sidebar';
+import { SidebarProvider, Sidebar, SidebarTrigger, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarContent, SidebarHeader, SidebarInset, SidebarFooter } from '@/components/ui/sidebar';
 import Link from 'next/link';
-import { Users, Calendar, Archive, DollarSign, Home } from 'lucide-react';
+import { Users, Calendar, Archive, DollarSign, Home, Menu } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export const metadata = {
   title: 'Organizador de Clientes',
@@ -24,56 +25,83 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased">
         <SidebarProvider>
-          <Sidebar>
-            <SidebarContent>
-              <SidebarHeader>
-                <h2 className="text-xl font-semibold">Menu</h2>
-              </SidebarHeader>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <Link href="/">
+          <div className="flex flex-col min-h-screen">
+            <header className="sticky top-0 z-10 flex items-center justify-between w-full h-16 px-4 border-b shrink-0 bg-background md:px-6">
+              <div className="flex items-center gap-4">
+                 <SidebarTrigger className="md:hidden"/>
+                <Link href="/" className="hidden font-bold md:flex items-center gap-2">
+                   <Users className="w-6 h-6" />
+                   <span className="text-lg">Organizador</span>
+                </Link>
+              </div>
+
+              <nav className="hidden md:flex gap-6 text-lg font-medium md:gap-5 md:text-sm lg:gap-6">
+                 <Link href="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
                       <Users />
                       <span>Clientes</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <Link href="/aniversarios">
+                  </Link>
+                  <Link href="/aniversarios" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
                       <Calendar />
                       <span>Aniversários</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <Link href="/estoque">
+                  </Link>
+                  <Link href="/estoque" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
                       <Archive />
                       <span>Estoque</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <Link href="/faturamento">
+                  </Link>
+                   <Link href="/faturamento" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
                       <DollarSign />
                       <span>Faturamento</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarContent>
-          </Sidebar>
-          <SidebarInset>
-            <header className="flex items-center p-4 border-b md:hidden">
-              <SidebarTrigger />
-              <h1 className="text-xl font-bold ml-4">Organizador de Clientes</h1>
+                  </Link>
+              </nav>
+
             </header>
-            <main className="flex-1">
+            
+            <Sidebar>
+                <SidebarContent>
+                    <SidebarHeader>
+                        <h2 className="text-xl font-semibold">Menu</h2>
+                    </SidebarHeader>
+                    <SidebarMenu>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
+                            <Link href="/">
+                            <Users />
+                            <span>Clientes</span>
+                            </Link>
+                        </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
+                            <Link href="/aniversarios">
+                            <Calendar />
+                            <span>Aniversários</span>
+                            </Link>
+                        </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
+                            <Link href="/estoque">
+                            <Archive />
+                            <span>Estoque</span>
+                            </Link>
+                        </SidebarMenuButton>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                        <SidebarMenuButton asChild>
+                            <Link href="/faturamento">
+                            <DollarSign />
+                            <span>Faturamento</span>
+                            </Link>
+                        </SidebarMenuButton>
+                        </SidebarMenuItem>
+                    </SidebarMenu>
+                </SidebarContent>
+            </Sidebar>
+
+            <main className="flex-1 p-4 md:p-6 lg:p-8">
               {children}
             </main>
-          </SidebarInset>
+          </div>
         </SidebarProvider>
         <Toaster />
       </body>

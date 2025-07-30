@@ -123,9 +123,9 @@ export function InventoryPage() {
             productToUpdate.history = [newHistoryEntry, ...productToUpdate.history];
             
             updatedProducts[productIndex] = productToUpdate;
+            toast({ title: 'Sucesso!', description: `Estoque do produto "${name}" atualizado.`, className: 'bg-accent text-accent-foreground' });
             return updatedProducts;
         });
-        toast({ title: 'Sucesso!', description: `Estoque do produto "${name}" atualizado.`, className: 'bg-accent text-accent-foreground' });
       }
     };
 
@@ -133,7 +133,7 @@ export function InventoryPage() {
         return products.filter(product => {
             const search = searchTerm.toLowerCase();
             return product.name.toLowerCase().includes(search);
-        }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }, [products, searchTerm]);
 
     if (!isClientMounted) {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { Client } from '@/lib/types';
+import type { Client, Purchase, Installment } from '@/lib/types';
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,7 @@ import {
   } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 interface ViewHistoryDialogProps {
   open: boolean;
@@ -34,6 +35,7 @@ const formatCurrency = (amount: number) => {
   };
   
 const formatDate = (dateString: string) => {
+    if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('pt-BR', {
         year: 'numeric',
         month: 'short',
@@ -41,59 +43,77 @@ const formatDate = (dateString: string) => {
     });
 }
 
+const getStatusBadge = (status: Installment['status']) => {
+    switch (status) {
+        case 'paid':
+            return <Badge className="bg-green-500 text-white">Quitado</Badge>;
+        case 'pending':
+            return <Badge variant="outline">A vencer</Badge>;
+        case 'overdue':
+            return <Badge variant="destructive">Vencido</Badge>;
+        default:
+            return null;
+    }
+}
+
 export function ViewHistoryDialog({ open, onOpenChange, client }: ViewHistoryDialogProps) {
-  const transactions = useMemo(() => {
+
+  const sortedPurchases = useMemo(() => {
     if (!client) return [];
-
-    const allTransactions = [
-      ...client.purchases.map(p => ({ ...p, type: 'purchase' as const, amount: p.value, description: p.item })),
-      ...client.payments.map(p => ({ ...p, type: 'payment' as const, description: 'Pagamento recebido' })),
-    ];
-
-    return allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    return [...client.purchases].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [client]);
 
   if (!client) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Histórico de Transações</DialogTitle>
+          <DialogTitle>Histórico de Transações de {client.name}</DialogTitle>
           <DialogDescription>
-            Exibindo histórico completo para {client.name}.
+            Exibindo histórico completo de compras e pagamentos.
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[60vh] overflow-y-auto pr-4">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {transactions.map(tx => (
-                        <TableRow key={tx.id}>
-                            <TableCell>{formatDate(tx.date)}</TableCell>
-                            <TableCell>{tx.description}</TableCell>
-                            <TableCell>
-                                <Badge variant={tx.type === 'purchase' ? 'destructive' : 'default'} className={cn(tx.type === 'payment' && 'bg-accent text-accent-foreground')}>
-                                    {tx.type === 'purchase' ? 'Compra' : 'Pagamento'}
-                                </Badge>
-                            </TableCell>
-                            <TableCell className={cn('text-right font-medium', tx.type === 'purchase' ? 'text-destructive' : 'text-accent-foreground')}>
-                                {formatCurrency(tx.amount)}
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
-            {transactions.length === 0 && (
-                <p className="text-center text-muted-foreground p-8">Nenhuma transação registrada.</p>
+            {sortedPurchases.length === 0 && (
+                 <p className="text-center text-muted-foreground p-8">Nenhuma compra registrada.</p>
             )}
+            <Accordion type="multiple" className="w-full">
+                {sortedPurchases.map(purchase => (
+                    <AccordionItem value={purchase.id} key={purchase.id}>
+                        <AccordionTrigger>
+                            <div className="flex justify-between w-full pr-4">
+                                <span>{formatDate(purchase.date)} - {purchase.item}</span>
+                                <span className="font-semibold">{formatCurrency(purchase.totalValue)}</span>
+                            </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                             <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Parcela</TableHead>
+                                        <TableHead>Vencimento</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead className="text-right">Valor</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {purchase.installments.map(inst => (
+                                        <TableRow key={inst.id}>
+                                            <TableCell>{inst.installmentNumber} / {purchase.installments.length}</TableCell>
+                                            <TableCell>{formatDate(inst.dueDate)}</TableCell>
+                                            <TableCell>{getStatusBadge(inst.status)}</TableCell>
+                                            <TableCell className={cn('text-right font-medium', inst.status === 'overdue' ? 'text-destructive' : '')}>
+                                                {formatCurrency(inst.value)}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </AccordionContent>
+                    </AccordionItem>
+                ))}
+            </Accordion>
         </div>
       </DialogContent>
     </Dialog>

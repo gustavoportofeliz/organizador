@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import type { Client } from '@/lib/types';
+import type { Client, Purchase, Installment } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -18,8 +18,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { AddClientDialog } from '@/components/add-client-dialog';
-import { AddTransactionDialog } from '@/components/add-transaction-dialog';
+import { AddClientDialog, type AddClientFormValues } from '@/components/add-client-dialog';
+import { AddTransactionDialog, type AddTransactionFormValues } from '@/components/add-transaction-dialog';
 import { ViewHistoryDialog } from '@/components/view-history-dialog';
 import {
   DollarSign,
@@ -31,29 +31,31 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { addMonths } from 'date-fns';
+
 
 const initialClientsData: Client[] = [
-  {
-    id: '1',
-    name: 'João Silva',
-    purchases: [
-      { id: 'p1', item: 'Produto A', value: 150.0, date: new Date(2023, 10, 1).toISOString() },
-      { id: 'p2', item: 'Produto B', value: 200.0, date: new Date(2023, 10, 15).toISOString() },
-    ],
-    payments: [{ id: 'pay1', amount: 300.0, date: new Date(2023, 10, 20).toISOString() }],
-  },
-  {
-    id: '2',
-    name: 'Maria Oliveira',
-    purchases: [{ id: 'p3', item: 'Produto C', value: 500.0, date: new Date(2023, 11, 5).toISOString() }],
-    payments: [],
-  },
-  {
-    id: '3',
-    name: 'Carlos Pereira',
-    purchases: [{ id: 'p4', item: 'Serviço X', value: 1200.0, date: new Date(2023, 11, 10).toISOString() }],
-    payments: [{ id: 'pay2', amount: 1200.0, date: new Date(2023, 11, 12).toISOString() }],
-  },
+  // {
+  //   id: '1',
+  //   name: 'João Silva',
+  //   purchases: [
+  //     { id: 'p1', item: 'Produto A', value: 150.0, date: new Date(2023, 10, 1).toISOString() },
+  //     { id: 'p2', item: 'Produto B', value: 200.0, date: new Date(2023, 10, 15).toISOString() },
+  //   ],
+  //   payments: [{ id: 'pay1', amount: 300.0, date: new Date(2023, 10, 20).toISOString() }],
+  // },
+  // {
+  //   id: '2',
+  //   name: 'Maria Oliveira',
+  //   purchases: [{ id: 'p3', item: 'Produto C', value: 500.0, date: new Date(2023, 11, 5).toISOString() }],
+  //   payments: [],
+  // },
+  // {
+  //   id: '3',
+  //   name: 'Carlos Pereira',
+  //   purchases: [{ id: 'p4', item: 'Serviço X', value: 1200.0, date: new Date(2023, 11, 10).toISOString() }],
+  //   payments: [{ id: 'pay2', amount: 1200.0, date: new Date(2023, 11, 12).toISOString() }],
+  // },
 ];
 
 const formatCurrency = (amount: number) => {
@@ -73,46 +75,107 @@ export function ClientPage() {
 
   const { toast } = useToast();
 
+  const updateInstallmentStatuses = (clients: Client[]): Client[] => {
+    const now = new Date();
+    return clients.map(client => ({
+      ...client,
+      purchases: client.purchases.map(purchase => ({
+        ...purchase,
+        installments: purchase.installments.map(inst => {
+          if (inst.status === 'paid') return inst;
+          const dueDate = new Date(inst.dueDate);
+          if (now > dueDate) {
+            return { ...inst, status: 'overdue' };
+          }
+          return inst;
+        })
+      }))
+    }));
+  };
+
   useEffect(() => {
-    setClients(initialClientsData);
+    const storedClients = localStorage.getItem('clients');
+    const initialClients = storedClients ? JSON.parse(storedClients) : initialClientsData;
+    setClients(updateInstallmentStatuses(initialClients));
     setIsClientMounted(true);
   }, []);
 
+  useEffect(() => {
+    if(isClientMounted) {
+      localStorage.setItem('clients', JSON.stringify(clients));
+      const interval = setInterval(() => {
+        setClients(prevClients => updateInstallmentStatuses(prevClients));
+      }, 60000); // Check for overdue installments every minute
+      return () => clearInterval(interval);
+    }
+  }, [clients, isClientMounted]);
+
+
   const totalOutstandingBalance = useMemo(() => {
     return clients.reduce((total, client) => {
-      const totalPurchases = client.purchases.reduce((sum, p) => sum + p.value, 0);
-      const totalPayments = client.payments.reduce((sum, p) => sum + p.amount, 0);
-      return total + (totalPurchases - totalPayments);
+      const clientBalance = client.purchases.reduce((purchaseTotal, purchase) => {
+        const purchaseBalance = purchase.installments
+          .filter(inst => inst.status !== 'paid')
+          .reduce((sum, inst) => sum + inst.value, 0);
+        return purchaseTotal + purchaseBalance;
+      }, 0);
+      return total + clientBalance;
     }, 0);
   }, [clients]);
 
-  const handleAddClient = (data: { name: string; purchaseItem: string; purchaseValue: number; paymentAmount: number }) => {
+  const handleAddClient = (data: AddClientFormValues) => {
     const newClient: Client = {
       id: crypto.randomUUID(),
       name: data.name,
       purchases: [],
       payments: [],
     };
-    if (data.purchaseValue > 0) {
-      newClient.purchases.push({
-        id: crypto.randomUUID(),
-        item: data.purchaseItem || 'Compra inicial',
-        value: data.purchaseValue,
-        date: new Date().toISOString(),
-      });
+
+    if (data.purchaseValue && data.purchaseValue > 0) {
+        const newPurchase: Purchase = {
+            id: crypto.randomUUID(),
+            item: data.purchaseItem || 'Compra inicial',
+            totalValue: data.purchaseValue,
+            date: new Date().toISOString(),
+            installments: [],
+        };
+
+        if (data.splitPurchase && data.installments && data.installments > 1) {
+            const installmentValue = data.purchaseValue / data.installments;
+            for (let i = 1; i <= data.installments; i++) {
+                newPurchase.installments.push({
+                    id: crypto.randomUUID(),
+                    installmentNumber: i,
+                    value: installmentValue,
+                    dueDate: addMonths(new Date(), i).toISOString(),
+                    status: 'pending',
+                });
+            }
+        } else {
+            newPurchase.installments.push({
+                id: crypto.randomUUID(),
+                installmentNumber: 1,
+                value: data.purchaseValue,
+                dueDate: addMonths(new Date(), 1).toISOString(),
+                status: 'pending',
+            });
+        }
+        newClient.purchases.push(newPurchase);
     }
-    if (data.paymentAmount > 0) {
+
+    if (data.paymentAmount && data.paymentAmount > 0) {
       newClient.payments.push({
         id: crypto.randomUUID(),
         amount: data.paymentAmount,
         date: new Date().toISOString(),
       });
+      // Logic to apply initial payment to installments would go here
     }
     setClients(prev => [...prev, newClient]);
     toast({ title: 'Sucesso!', description: 'Novo cliente adicionado.', className: 'bg-accent text-accent-foreground' });
   };
 
-  const handleAddTransaction = (data: { type: 'purchase' | 'payment'; item?: string; amount: number }) => {
+  const handleAddTransaction = (data: AddTransactionFormValues) => {
     if (!selectedClient) return;
 
     setClients(prev =>
@@ -120,15 +183,75 @@ export function ClientPage() {
         if (c.id === selectedClient.id) {
           const updatedClient = { ...c };
           if (data.type === 'purchase') {
-            updatedClient.purchases = [
-              ...c.purchases,
-              { id: crypto.randomUUID(), item: data.item || 'Nova Compra', value: data.amount, date: new Date().toISOString() },
-            ];
-          } else {
-            updatedClient.payments = [
-              ...c.payments,
-              { id: crypto.randomUUID(), amount: data.amount, date: new Date().toISOString() },
-            ];
+            const newPurchase: Purchase = {
+                id: crypto.randomUUID(),
+                item: data.item || 'Nova Compra',
+                totalValue: data.amount,
+                date: new Date().toISOString(),
+                installments: [],
+            };
+    
+            if (data.splitPurchase && data.installments && data.installments > 1) {
+                const installmentValue = data.amount / data.installments;
+                for (let i = 1; i <= data.installments; i++) {
+                    newPurchase.installments.push({
+                        id: crypto.randomUUID(),
+                        installmentNumber: i,
+                        value: installmentValue,
+                        dueDate: addMonths(new Date(), i).toISOString(),
+                        status: 'pending',
+                    });
+                }
+            } else {
+                newPurchase.installments.push({
+                    id: crypto.randomUUID(),
+                    installmentNumber: 1,
+                    value: data.amount,
+                    dueDate: addMonths(new Date(), 1).toISOString(),
+                    status: 'pending',
+                });
+            }
+            updatedClient.purchases.push(newPurchase);
+          } else { // Payment
+            // For simplicity, we add a general payment. A more complex UI would allow paying specific installments.
+            let remainingPayment = data.amount;
+
+            // Pay oldest pending/overdue installments first
+            const sortedInstallments = updatedClient.purchases
+              .flatMap(p => p.installments.map(i => ({...i, purchaseId: p.id})))
+              .filter(i => i.status === 'pending' || i.status === 'overdue')
+              .sort((a,b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+
+            for (const inst of sortedInstallments) {
+              if (remainingPayment <= 0) break;
+              if (inst.status !== 'paid') {
+                const paymentForThis = Math.min(remainingPayment, inst.value);
+                // This is a simplification. A real app would handle partial payments.
+                if (paymentForThis >= inst.value) {
+                    updatedClient.purchases = updatedClient.purchases.map(p => {
+                        if (p.id === inst.purchaseId) {
+                            return {
+                                ...p,
+                                installments: p.installments.map(i => {
+                                    if (i.id === inst.id) {
+                                        return {...i, status: 'paid', paidDate: new Date().toISOString()}
+                                    }
+                                    return i;
+                                })
+                            }
+                        }
+                        return p;
+                    })
+                    remainingPayment -= inst.value;
+                }
+              }
+            }
+            
+            updatedClient.payments.push({ 
+                id: crypto.randomUUID(), 
+                amount: data.amount, 
+                date: new Date().toISOString() 
+            });
           }
           return updatedClient;
         }
@@ -149,10 +272,18 @@ export function ClientPage() {
   };
 
   const calculateBalance = (client: Client) => {
-    const totalPurchases = client.purchases.reduce((sum, p) => sum + p.value, 0);
+    const totalPurchases = client.purchases.reduce((sum, p) => sum + p.totalValue, 0);
     const totalPayments = client.payments.reduce((sum, p) => sum + p.amount, 0);
     return totalPurchases - totalPayments;
   };
+
+  const getClientTotals = (client: Client) => {
+    const totalPurchases = client.purchases.reduce((sum, p) => sum + p.totalValue, 0);
+    const totalPayments = client.payments.reduce((sum, p) => sum + p.amount, 0);
+    const balance = totalPurchases - totalPayments;
+    return { totalPurchases, totalPayments, balance };
+  }
+
 
   if (!isClientMounted) {
     return null; // Or a loading spinner
@@ -209,10 +340,7 @@ export function ClientPage() {
               </TableHeader>
               <TableBody>
                 {clients.map(client => {
-                  const balance = calculateBalance(client);
-                  const totalPurchases = client.purchases.reduce((sum, p) => sum + p.value, 0);
-                  const totalPayments = client.payments.reduce((sum, p) => sum + p.amount, 0);
-
+                  const { totalPurchases, totalPayments, balance } = getClientTotals(client);
                   return (
                     <TableRow key={client.id} className="hover:bg-secondary/50 transition-colors duration-300">
                       <TableCell className="font-medium">{client.name}</TableCell>

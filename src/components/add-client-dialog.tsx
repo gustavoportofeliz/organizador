@@ -22,15 +22,22 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { PlusCircle } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Nome deve ter pelo menos 2 caracteres.' }),
   purchaseItem: z.string().optional(),
   purchaseValue: z.coerce.number().min(0).optional().default(0),
   paymentAmount: z.coerce.number().min(0).optional().default(0),
+  splitPurchase: z.boolean().default(false),
+  installments: z.coerce.number().min(1).max(6).optional(),
 });
 
-type AddClientFormValues = z.infer<typeof formSchema>;
+export type AddClientFormValues = z.infer<typeof formSchema> & {
+  installmentDueDates?: (string | undefined)[];
+};
 
 interface AddClientDialogProps {
   open: boolean;
@@ -39,17 +46,23 @@ interface AddClientDialogProps {
 }
 
 export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDialogProps) {
-  const form = useForm<AddClientFormValues>({
+  const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
       purchaseItem: '',
       purchaseValue: 0,
       paymentAmount: 0,
+      splitPurchase: false,
+      installments: 1,
     },
   });
 
-  const onSubmit = (data: AddClientFormValues) => {
+  const { watch, setValue } = form;
+  const splitPurchase = watch('splitPurchase');
+  const installments = watch('installments');
+
+  const onSubmit = (data: z.infer<typeof formSchema>) => {
     onAddClient(data);
     onOpenChange(false);
     form.reset();
@@ -105,12 +118,56 @@ export function AddClientDialog({ open, onOpenChange, onAddClient }: AddClientDi
                 </FormItem>
               )}
             />
+
+            <div className="flex items-center space-x-2">
+                <FormField
+                    control={form.control}
+                    name="splitPurchase"
+                    render={({ field }) => (
+                        <FormItem>
+                             <FormControl>
+                                <Switch
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                />
+                            </FormControl>
+                        </FormItem>
+                    )}
+                />
+                <Label htmlFor="split-purchase">Dividir compra em parcelas</Label>
+            </div>
+
+            {splitPurchase && (
+                 <FormField
+                    control={form.control}
+                    name="installments"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Número de Parcelas</FormLabel>
+                        <Select onValueChange={(value) => field.onChange(parseInt(value))} defaultValue={String(field.value)}>
+                            <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione o número de parcelas" />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                {[...Array(6)].map((_, i) => (
+                                    <SelectItem key={i + 1} value={String(i + 1)}>{i + 1}x</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+            )}
+
             <FormField
               control={form.control}
               name="paymentAmount"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Valor do Pagamento (R$)</FormLabel>
+                  <FormLabel>Valor do Pagamento Inicial (R$)</FormLabel>
                   <FormControl>
                     <Input type="number" placeholder="0.00" {...field} />
                   </FormControl>

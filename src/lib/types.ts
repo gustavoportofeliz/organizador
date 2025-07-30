@@ -1,7 +1,17 @@
+export type Installment = {
+  id: string;
+  installmentNumber: number;
+  value: number;
+  dueDate: string;
+  status: 'pending' | 'paid' | 'overdue';
+  paidDate?: string;
+};
+
 export type Purchase = {
   id: string;
   item: string;
-  value: number;
+  totalValue: number;
+  installments: Installment[];
   date: string;
 };
 
@@ -9,6 +19,7 @@ export type Payment = {
   id: string;
   amount: number;
   date: string;
+  installmentId?: string; 
 };
 
 export type Client = {

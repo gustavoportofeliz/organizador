@@ -182,7 +182,6 @@ export function ClientPage() {
       prev.map(c => {
         if (c.id === selectedClient.id) {
           const updatedClient = { ...c };
-          if (data.type === 'purchase') {
             const newPurchase: Purchase = {
                 id: crypto.randomUUID(),
                 item: data.item || 'Nova Compra',
@@ -212,53 +211,56 @@ export function ClientPage() {
                 });
             }
             updatedClient.purchases.push(newPurchase);
-          } else { // Payment
-            // For simplicity, we add a general payment. A more complex UI would allow paying specific installments.
-            let remainingPayment = data.amount;
-
-            // Pay oldest pending/overdue installments first
-            const sortedInstallments = updatedClient.purchases
-              .flatMap(p => p.installments.map(i => ({...i, purchaseId: p.id})))
-              .filter(i => i.status === 'pending' || i.status === 'overdue')
-              .sort((a,b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-
-            for (const inst of sortedInstallments) {
-              if (remainingPayment <= 0) break;
-              if (inst.status !== 'paid') {
-                const paymentForThis = Math.min(remainingPayment, inst.value);
-                // This is a simplification. A real app would handle partial payments.
-                if (paymentForThis >= inst.value) {
-                    updatedClient.purchases = updatedClient.purchases.map(p => {
-                        if (p.id === inst.purchaseId) {
-                            return {
-                                ...p,
-                                installments: p.installments.map(i => {
-                                    if (i.id === inst.id) {
-                                        return {...i, status: 'paid', paidDate: new Date().toISOString()}
-                                    }
-                                    return i;
-                                })
-                            }
-                        }
-                        return p;
-                    })
-                    remainingPayment -= inst.value;
-                }
-              }
-            }
-            
+          
             updatedClient.payments.push({ 
                 id: crypto.randomUUID(), 
                 amount: data.amount, 
                 date: new Date().toISOString() 
             });
-          }
+          
           return updatedClient;
         }
         return c;
       })
     );
     toast({ title: 'Sucesso!', description: 'Transação registrada.', className: 'bg-accent text-accent-foreground' });
+  };
+  
+  const handlePayInstallment = (clientId: string, purchaseId: string, installmentId: string) => {
+    setClients(prevClients => 
+      prevClients.map(client => {
+        if (client.id === clientId) {
+          const newClient = { ...client };
+          newClient.purchases = newClient.purchases.map(purchase => {
+            if (purchase.id === purchaseId) {
+              const newPurchase = { ...purchase };
+              newPurchase.installments = newPurchase.installments.map(inst => {
+                if (inst.id === installmentId && inst.status !== 'paid') {
+                  return { ...inst, status: 'paid', paidDate: new Date().toISOString() };
+                }
+                return inst;
+              });
+              return newPurchase;
+            }
+            return purchase;
+          });
+          // Optionally add a payment record
+          const purchase = newClient.purchases.find(p => p.id === purchaseId);
+          const installment = purchase?.installments.find(i => i.id === installmentId);
+          if (installment) {
+            newClient.payments.push({
+                id: crypto.randomUUID(),
+                amount: installment.value,
+                date: new Date().toISOString(),
+                installmentId: installmentId,
+            });
+          }
+          return newClient;
+        }
+        return client;
+      })
+    );
+    toast({ title: 'Sucesso!', description: 'Parcela quitada.', className: 'bg-accent text-accent-foreground' });
   };
 
   const openTransactionDialog = (client: Client) => {
@@ -360,7 +362,7 @@ export function ClientPage() {
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => openTransactionDialog(client)}>
                               <Plus className="mr-2 h-4 w-4" />
-                              <span>Adicionar Transação</span>
+                              <span>Adicionar Compra</span>
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => openHistoryDialog(client)}>
                               <History className="mr-2 h-4 w-4" />
@@ -389,11 +391,14 @@ export function ClientPage() {
         onAddTransaction={handleAddTransaction}
         client={selectedClient}
       />
-      <ViewHistoryDialog
+       <ViewHistoryDialog
         open={isViewHistoryOpen}
         onOpenChange={setViewHistoryOpen}
         client={selectedClient}
+        onPayInstallment={handlePayInstallment}
       />
     </div>
   );
 }
+
+    

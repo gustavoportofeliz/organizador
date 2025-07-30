@@ -18,6 +18,7 @@ import {
     TableRow,
   } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
@@ -25,6 +26,7 @@ interface ViewHistoryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   client: Client | null;
+  onPayInstallment: (clientId: string, purchaseId: string, installmentId: string) => void;
 }
 
 const formatCurrency = (amount: number) => {
@@ -46,28 +48,34 @@ const formatDate = (dateString: string) => {
 const getStatusBadge = (status: Installment['status']) => {
     switch (status) {
         case 'paid':
-            return <Badge className="bg-green-500 text-white">Quitado</Badge>;
+            return <Badge className="bg-green-500 hover:bg-green-600 text-white capitalize">Quitado</Badge>;
         case 'pending':
-            return <Badge variant="outline">A vencer</Badge>;
+            return <Badge className="bg-yellow-500 hover:bg-yellow-600 text-white capitalize">A Vencer</Badge>;
         case 'overdue':
-            return <Badge variant="destructive">Vencido</Badge>;
+            return <Badge variant="destructive" className="capitalize">Vencido</Badge>;
         default:
             return null;
     }
 }
 
-export function ViewHistoryDialog({ open, onOpenChange, client }: ViewHistoryDialogProps) {
+export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment }: ViewHistoryDialogProps) {
 
   const sortedPurchases = useMemo(() => {
     if (!client) return [];
     return [...client.purchases].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [client]);
 
+  const handlePay = (purchaseId: string, installmentId: string) => {
+    if (client) {
+      onPayInstallment(client.id, purchaseId, installmentId);
+    }
+  }
+
   if (!client) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Histórico de Transações de {client.name}</DialogTitle>
           <DialogDescription>
@@ -95,6 +103,7 @@ export function ViewHistoryDialog({ open, onOpenChange, client }: ViewHistoryDia
                                         <TableHead>Vencimento</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead className="text-right">Valor</TableHead>
+                                        <TableHead className="text-center">Ação</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -105,6 +114,15 @@ export function ViewHistoryDialog({ open, onOpenChange, client }: ViewHistoryDia
                                             <TableCell>{getStatusBadge(inst.status)}</TableCell>
                                             <TableCell className={cn('text-right font-medium', inst.status === 'overdue' ? 'text-destructive' : '')}>
                                                 {formatCurrency(inst.value)}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                {inst.status !== 'paid' ? (
+                                                    <Button size="sm" onClick={() => handlePay(purchase.id, inst.id)}>
+                                                        Quitar
+                                                    </Button>
+                                                ) : (
+                                                    <span className="text-sm font-semibold text-green-600">Quitado</span>
+                                                )}
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -119,3 +137,5 @@ export function ViewHistoryDialog({ open, onOpenChange, client }: ViewHistoryDia
     </Dialog>
   );
 }
+
+    

@@ -21,7 +21,6 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useEffect } from 'react';
 import type { Client } from '@/lib/types';
 import { Switch } from '@/components/ui/switch';
@@ -29,10 +28,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const formSchema = z.object({
-  type: z.enum(['purchase', 'payment'], {
-    required_error: 'Você precisa selecionar um tipo de transação.',
-  }),
-  item: z.string().optional(),
+  item: z.string().min(1, { message: 'A descrição é obrigatória.' }),
   amount: z.coerce.number().min(0.01, { message: 'O valor deve ser maior que zero.' }),
   splitPurchase: z.boolean().default(false),
   installments: z.coerce.number().min(1).max(6).optional(),
@@ -58,7 +54,6 @@ export function AddTransactionDialog({
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      type: 'purchase',
       amount: 0,
       item: '',
       splitPurchase: false,
@@ -67,12 +62,10 @@ export function AddTransactionDialog({
   });
 
   const { watch, reset, control } = form;
-  const transactionType = watch('type');
   const splitPurchase = watch('splitPurchase');
-  const installments = watch('installments');
 
   useEffect(() => {
-    reset({ type: 'purchase', amount: 0, item: '', splitPurchase: false, installments: 1 });
+    reset({ amount: 0, item: '', splitPurchase: false, installments: 1 });
   }, [open, reset]);
 
   const onSubmit = (data: z.infer<typeof formSchema>) => {
@@ -86,108 +79,32 @@ export function AddTransactionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Adicionar Transação para {client.name}</DialogTitle>
+          <DialogTitle>Adicionar Compra para {client.name}</DialogTitle>
           <DialogDescription>
-            Registre uma nova compra ou pagamento para este cliente.
+            Registre um novo produto comprado por este cliente.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
               control={control}
-              name="type"
+              name="item"
               render={({ field }) => (
-                <FormItem className="space-y-3">
-                  <FormLabel>Tipo de Transação</FormLabel>
+                <FormItem>
+                  <FormLabel>Descrição da Compra</FormLabel>
                   <FormControl>
-                    <RadioGroup
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                      className="flex flex-col space-y-1"
-                    >
-                      <FormItem className="flex items-center space-x-3 space-y-0">
-                        <FormControl>
-                          <RadioGroupItem value="purchase" />
-                        </FormControl>
-                        <FormLabel className="font-normal">Compra</FormLabel>
-                      </FormItem>
-                      <FormItem className="flex items-center space-x-3 space-y-0">
-                        <FormControl>
-                          <RadioGroupItem value="payment" />
-                        </FormControl>
-                        <FormLabel className="font-normal">Pagamento</FormLabel>
-                      </FormItem>
-                    </RadioGroup>
+                    <Input placeholder="Ex: Produto Y" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            {transactionType === 'purchase' && (
-              <>
-                <FormField
-                  control={control}
-                  name="item"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Descrição da Compra</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Ex: Produto Y" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="flex items-center space-x-2">
-                   <FormField
-                    control={control}
-                    name="splitPurchase"
-                    render={({ field }) => (
-                        <FormItem>
-                             <FormControl>
-                                <Switch
-                                    id="split-purchase-transaction"
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                />
-                            </FormControl>
-                        </FormItem>
-                    )}
-                  />
-                  <Label htmlFor="split-purchase-transaction">Dividir compra em parcelas</Label>
-                </div>
-                {splitPurchase && (
-                   <FormField
-                      control={control}
-                      name="installments"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Número de Parcelas</FormLabel>
-                          <Select onValueChange={(value) => field.onChange(parseInt(value))} defaultValue={String(field.value)}>
-                              <FormControl>
-                                  <SelectTrigger>
-                                      <SelectValue placeholder="Selecione o número de parcelas" />
-                                  </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                  {[...Array(6)].map((_, i) => (
-                                      <SelectItem key={i + 1} value={String(i + 1)}>{i + 1}x</SelectItem>
-                                  ))}
-                              </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                )}
-              </>
-            )}
-            <FormField
+             <FormField
               control={control}
               name="amount"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Valor (R$)</FormLabel>
+                  <FormLabel>Valor da Compra (R$)</FormLabel>
                   <FormControl>
                     <Input type="number" placeholder="0.00" {...field} />
                   </FormControl>
@@ -195,9 +112,51 @@ export function AddTransactionDialog({
                 </FormItem>
               )}
             />
+            <div className="flex items-center space-x-2">
+                <FormField
+                control={control}
+                name="splitPurchase"
+                render={({ field }) => (
+                    <FormItem>
+                          <FormControl>
+                            <Switch
+                                id="split-purchase-transaction"
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                            />
+                        </FormControl>
+                    </FormItem>
+                )}
+              />
+              <Label htmlFor="split-purchase-transaction">Dividir compra em parcelas</Label>
+            </div>
+            {splitPurchase && (
+                <FormField
+                  control={control}
+                  name="installments"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Número de Parcelas</FormLabel>
+                      <Select onValueChange={(value) => field.onChange(parseInt(value))} defaultValue={String(field.value)}>
+                          <FormControl>
+                              <SelectTrigger>
+                                  <SelectValue placeholder="Selecione o número de parcelas" />
+                              </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                              {[...Array(6)].map((_, i) => (
+                                  <SelectItem key={i + 1} value={String(i + 1)}>{i + 1}x</SelectItem>
+                              ))}
+                          </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+            )}
             <DialogFooter>
               <Button type="submit" className="bg-accent hover:bg-accent/90 text-accent-foreground">
-                Registrar Transação
+                Registrar Compra
               </Button>
             </DialogFooter>
           </form>
@@ -206,3 +165,5 @@ export function AddTransactionDialog({
     </Dialog>
   );
 }
+
+    

@@ -6,10 +6,14 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  getAuth,
   type User,
 } from 'firebase/auth';
-import { auth } from './firebase'; // Import auth from firebase
+import { app } from './firebase'; // Import app from firebase
 import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+
+// This ensures auth is initialized with the app instance
+const auth = getAuth(app);
 
 // Sign up
 export const signUp = (email: string, password: string) => {

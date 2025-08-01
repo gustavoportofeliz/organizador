@@ -109,6 +109,7 @@ export const addClient = async (data: AddClientFormValues) => {
         preferences: data.preferences || '',
       });
 
+      // Handle purchase and payment logic only if a purchase is made
       if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
         const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
         const purchaseRef = doc(collection(db, purchasePath));
@@ -132,8 +133,10 @@ export const addClient = async (data: AddClientFormValues) => {
           })),
         };
 
+        // If there is an initial payment, apply it to the installments
         if (data.paymentAmount && data.paymentAmount > 0) {
           let remainingPayment = data.paymentAmount;
+          
           const paymentPath = `${getScopedPath()}/clients/${clientId}/payments`;
           const paymentRef = doc(collection(db, paymentPath));
           transaction.set(paymentRef, {
@@ -145,6 +148,7 @@ export const addClient = async (data: AddClientFormValues) => {
             paymentMethod: data.paymentMethod,
           });
 
+          // Iterate over installments and mark as paid
           for (const installment of newPurchase.installments) {
             if (remainingPayment <= 0) break;
             if (installment.status === 'pending' && remainingPayment >= installment.value) {
@@ -156,12 +160,12 @@ export const addClient = async (data: AddClientFormValues) => {
           }
         }
         transaction.set(purchaseRef, { ...newPurchase, id: purchaseId });
+
+        // Update product stock after purchase
+        await updateProductStock(data.purchaseItem, 1, data.name, data.purchaseValue, clientId, transaction);
       }
     });
 
-    if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
-        await updateProductStock(data.purchaseItem, 1, data.name, data.purchaseValue, clientRef.id);
-    }
   } catch (e) {
       console.error("Transaction failed: ", e);
       throw e;
@@ -199,38 +203,38 @@ export const deleteClient = async (id: string) => {
 
 export const addTransaction = async (clientId: string, data: AddTransactionFormValues) => {
     const clientRef = doc(clientsCollection(), clientId);
-    const clientSnap = await getDoc(clientRef);
-    if (!clientSnap.exists()) {
-        throw new Error("Client not found");
-    }
-    const clientName = clientSnap.data()?.name || 'Cliente';
-    const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
-    const purchaseRef = doc(collection(db, purchasePath));
-    const batch = writeBatch(db);
-    const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
-    const installmentValue = data.amount / installmentsCount;
-    const intervalDays = data.installmentInterval || 30;
-
-    const newPurchase: Omit<Purchase, 'id'> = {
-        clientId: clientId,
-        item: data.item,
-        totalValue: data.amount,
-        paymentMethod: data.paymentMethod,
-        date: new Date().toISOString(),
-        installments: Array.from({ length: installmentsCount }, (_, i) => ({
-            id: crypto.randomUUID(),
-            installmentNumber: i + 1,
-            value: installmentValue,
-            dueDate: addDays(new Date(), i * intervalDays).toISOString(),
-            status: 'pending',
-            paymentMethod: i === 0 ? data.paymentMethod : undefined, // Assign method to first installment if not split
-        }))
-    };
-    batch.set(purchaseRef, { ...newPurchase, id: purchaseRef.id });
     
-    await batch.commit();
+    await runTransaction(db, async (transaction) => {
+        const clientSnap = await transaction.get(clientRef);
+        if (!clientSnap.exists()) {
+            throw new Error("Client not found");
+        }
+        const clientName = clientSnap.data()?.name || 'Cliente';
+        const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
+        const purchaseRef = doc(collection(db, purchasePath));
+        const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
+        const installmentValue = data.amount / installmentsCount;
+        const intervalDays = data.installmentInterval || 30;
 
-    await updateProductStock(data.item, 1, clientName, data.amount, clientId);
+        const newPurchase: Omit<Purchase, 'id'> = {
+            clientId: clientId,
+            item: data.item,
+            totalValue: data.amount,
+            paymentMethod: data.paymentMethod,
+            date: new Date().toISOString(),
+            installments: Array.from({ length: installmentsCount }, (_, i) => ({
+                id: crypto.randomUUID(),
+                installmentNumber: i + 1,
+                value: installmentValue,
+                dueDate: addDays(new Date(), i * intervalDays).toISOString(),
+                status: 'pending',
+                paymentMethod: i === 0 ? data.paymentMethod : undefined, // Assign method to first installment if not split
+            }))
+        };
+        transaction.set(purchaseRef, { ...newPurchase, id: purchaseRef.id });
+
+        await updateProductStock(data.item, 1, clientName, data.amount, clientId, transaction);
+    });
 };
 
 
@@ -346,36 +350,35 @@ export const addProduct = async (data: AddProductFormValues) => {
 };
 
 
-export const updateProductStock = async (productName: string, quantitySold: number, clientName: string, unitPrice: number, clientId: string) => {
-    await runTransaction(db, async (transaction) => {
-        const q = query(productsCollection(), where("name", "==", productName));
-        const productSnapshotDocs = (await getDocs(q)).docs;
-        
-        if (productSnapshotDocs.length === 0) {
-            console.warn(`Produto "${productName}" não encontrado no estoque. Venda registrada sem atualização de estoque.`);
-            return;
-        }
-        
-        const productDoc = productSnapshotDocs[0];
-        const productRef = productDoc.ref;
-        const currentQuantity = productDoc.data().quantity || 0;
-        
-        const newQuantity = currentQuantity - quantitySold;
-        transaction.update(productRef, { quantity: newQuantity });
-        
-        const historyPath = `${getScopedPath()}/products/${productRef.id}/history`;
-        const historyRef = doc(collection(db, historyPath));
-        const newHistoryEntry: Omit<ProductHistoryEntry, 'id'> = {
-            date: new Date().toISOString(),
-            type: 'sale',
-            quantity: quantitySold,
-            unitPrice,
-            notes: `Venda para ${clientName}`,
-            clientName,
-            clientId,
-        };
-        transaction.set(historyRef, { ...newHistoryEntry, id: historyRef.id });
-    });
+export const updateProductStock = async (productName: string, quantitySold: number, clientName: string, unitPrice: number, clientId: string, transaction: any) => {
+    const q = query(productsCollection(), where("name", "==", productName));
+    // Important: When calling this inside a transaction, we need to use the transaction object to get documents.
+    const productSnapshot = await transaction.get(q);
+
+    if (productSnapshot.empty) {
+        console.warn(`Produto "${productName}" não encontrado no estoque. Venda registrada sem atualização de estoque.`);
+        return;
+    }
+    
+    const productDoc = productSnapshot.docs[0];
+    const productRef = productDoc.ref;
+    const currentQuantity = productDoc.data().quantity || 0;
+    
+    const newQuantity = currentQuantity - quantitySold;
+    transaction.update(productRef, { quantity: newQuantity });
+    
+    const historyPath = `${getScopedPath()}/products/${productRef.id}/history`;
+    const historyRef = doc(collection(db, historyPath));
+    const newHistoryEntry: Omit<ProductHistoryEntry, 'id'> = {
+        date: new Date().toISOString(),
+        type: 'sale',
+        quantity: quantitySold,
+        unitPrice,
+        notes: `Venda para ${clientName}`,
+        clientName,
+        clientId,
+    };
+    transaction.set(historyRef, { ...newHistoryEntry, id: historyRef.id });
 }
 
 
@@ -398,3 +401,4 @@ export const deleteProduct = async (id: string) => {
     batch.delete(productRef);
     await batch.commit();
 };
+

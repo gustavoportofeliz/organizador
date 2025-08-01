@@ -78,6 +78,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
   const { watch, control } = form;
   const splitPurchase = watch('splitPurchase');
   const purchaseValue = watch('purchaseValue');
+  const purchaseItem = watch('purchaseItem');
 
   const onSubmit = (data: AddClientFormValues) => {
     onAddClient(data);
@@ -305,7 +306,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
                   )}
                 />
 
-                {(purchaseValue > 0) && (
+                {(purchaseValue > 0 || purchaseItem) && (
                 <FormField
                   control={control}
                   name="paymentMethod"

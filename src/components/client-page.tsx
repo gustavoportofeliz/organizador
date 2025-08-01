@@ -50,7 +50,6 @@ import {
   getClients, 
   payInstallment as payInstallmentInDb,
   getProducts,
-  updateProductStock as updateProductStockInDb
 } from '@/lib/firebase/firestore';
 
 

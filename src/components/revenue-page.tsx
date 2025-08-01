@@ -55,56 +55,37 @@ export function RevenuePage() {
         const data: { 
             [key: string]: { 
                 paid: number; 
-                details: { client: string; value: number; status: string, paidDate?: string }[] 
+                details: { client: string; value: number; date: string }[] 
             } 
         } = {};
 
+        // Iterate directly through all payments for a more accurate revenue calculation
         clients.forEach(client => {
-            client.purchases.forEach(purchase => {
-                purchase.installments.forEach(installment => {
-                    const monthYear = getMonthYear(installment.paidDate || installment.dueDate);
-                    if (!data[monthYear]) {
-                        data[monthYear] = { paid: 0, details: [] };
-                    }
-                    if (installment.status === 'paid' && installment.paidDate) {
-                       const paidMonthYear = getMonthYear(installment.paidDate);
-                       if (!data[paidMonthYear]) {
-                           data[paidMonthYear] = { paid: 0, details: [] };
-                       }
-                       data[paidMonthYear].paid += installment.value;
-                       data[paidMonthYear].details.push({
-                            client: client.name,
-                            value: installment.value,
-                            status: 'Quitado',
-                            paidDate: installment.paidDate
-                        });
-                    } else {
-                        // Add non-paid items to their due date month for context
-                        const dueMonthYear = getMonthYear(installment.dueDate);
-                        if (!data[dueMonthYear]) {
-                            data[dueMonthYear] = { paid: 0, details: [] };
-                        }
-                        data[dueMonthYear].details.push({
-                            client: client.name,
-                            value: installment.value,
-                            status: installment.status === 'overdue' ? 'Vencido' : 'Pendente'
-                        });
-                    }
+            client.payments.forEach(payment => {
+                const paidMonthYear = getMonthYear(payment.date);
+                if (!data[paidMonthYear]) {
+                    data[paidMonthYear] = { paid: 0, details: [] };
+                }
+                data[paidMonthYear].paid += payment.amount;
+                data[paidMonthYear].details.push({
+                    client: client.name,
+                    value: payment.amount,
+                    date: payment.date
                 });
             });
         });
         
-        // Sort months in ascending order (oldest first)
+        // Sort months in descending order (most recent first)
         return Object.entries(data)
             .sort(([a], [b]) => {
                 const [monthA, yearA] = a.split(' de ');
                 const [monthB, yearB] = b.split(' de ');
                 const dateA = new Date(parseInt(yearA), getMonthIndex(monthA));
                 const dateB = new Date(parseInt(yearB), getMonthIndex(monthB));
-                if (dateA > dateB) return 1;
-                if (dateA < dateB) return -1;
+                if (dateA > dateB) return -1;
+                if (dateA < dateB) return 1;
                 return 0;
-            }).reverse(); // Show most recent months first
+            });
 
     }, [clients]);
 
@@ -158,7 +139,7 @@ export function RevenuePage() {
                                 <div className="flex items-center gap-4 rounded-lg bg-green-50 dark:bg-green-900/30 p-4">
                                     <CheckCircle className="h-8 w-8 text-green-600" />
                                     <div>
-                                        <p className="text-sm text-green-700 dark:text-green-300">Total Quitado no Mês</p>
+                                        <p className="text-sm text-green-700 dark:text-green-300">Total Recebido no Mês</p>
                                         <p className="text-xl font-bold text-green-800 dark:text-green-200">{formatCurrency(data.paid)}</p>
                                     </div>
                                 </div>
@@ -170,18 +151,16 @@ export function RevenuePage() {
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead>Cliente</TableHead>
-                                                <TableHead>Status</TableHead>
+                                                <TableHead>Data do Pagamento</TableHead>
                                                 <TableHead className="text-right">Valor</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {data.details.sort((a,b) => a.client.localeCompare(b.client)).map((detail, index) => (
+                                            {data.details.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((detail, index) => (
                                                 <TableRow key={index}>
                                                     <TableCell>{detail.client}</TableCell>
                                                     <TableCell>
-                                                        <span className={`font-semibold ${detail.status === 'Quitado' ? 'text-green-600' : detail.status === 'Vencido' ? 'text-red-600' : 'text-yellow-600'}`}>
-                                                          {detail.status}
-                                                        </span>
+                                                      {new Date(detail.date).toLocaleDateString('pt-BR')}
                                                     </TableCell>
                                                     <TableCell className="text-right">{formatCurrency(detail.value)}</TableCell>
                                                 </TableRow>

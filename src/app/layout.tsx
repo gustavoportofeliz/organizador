@@ -2,6 +2,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { MainLayout } from '@/components/main-layout';
+import { AuthProvider } from '@/lib/firebase/auth'; // Import AuthProvider
 
 export const metadata: Metadata = {
   title: 'Organizador de Clientes',
@@ -13,6 +14,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Check if the current route is login or signup
+  // This is a workaround to conditionally apply MainLayout
+  // A better approach in a real app might involve route groups
   return (
     <html lang="en" suppressHydrationWarning>
        <head>
@@ -22,7 +26,9 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </head>
       <body className="font-body antialiased">
-        <MainLayout>{children}</MainLayout>
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

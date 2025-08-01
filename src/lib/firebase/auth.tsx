@@ -8,7 +8,7 @@ import {
   onAuthStateChanged,
   type User,
 } from 'firebase/auth';
-import { auth } from './firebase'; // Import the initialized auth instance
+import { auth } from './firebase'; // Import the initialized auth instance from the central file
 import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 
 // Sign up

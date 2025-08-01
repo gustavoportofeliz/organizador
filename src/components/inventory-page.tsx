@@ -99,33 +99,31 @@ export function InventoryPage() {
             unitPrice: unitPrice,
             notes: type === 'purchase' ? 'Compra de estoque' : 'Venda manual',
         };
+
+        if (isNewProduct) {
+            const newProduct: Product = {
+                id: crypto.randomUUID(),
+                name: name,
+                quantity: quantity,
+                history: [newHistoryEntry],
+                createdAt: new Date().toISOString(),
+            };
+            setProducts(prevProducts => [newProduct, ...prevProducts]);
+            toast({ title: 'Sucesso!', description: 'Novo produto adicionado.', className: 'bg-accent text-accent-foreground' });
+        } else {
+            const updatedProducts = [...products];
+            const productToUpdate = { ...updatedProducts[existingProductIndex] };
     
-        setProducts(prevProducts => {
-            if (isNewProduct) {
-                const newProduct: Product = {
-                    id: crypto.randomUUID(),
-                    name: name,
-                    quantity: quantity,
-                    history: [newHistoryEntry],
-                    createdAt: new Date().toISOString(),
-                };
-                toast({ title: 'Sucesso!', description: 'Novo produto adicionado.', className: 'bg-accent text-accent-foreground' });
-                return [newProduct, ...prevProducts];
-            } else {
-                const updatedProducts = [...prevProducts];
-                const productToUpdate = { ...updatedProducts[existingProductIndex] };
-    
-                productToUpdate.quantity = type === 'purchase' 
-                    ? productToUpdate.quantity + quantity 
-                    : productToUpdate.quantity - quantity;
-                
-                productToUpdate.history = [newHistoryEntry, ...productToUpdate.history];
-                updatedProducts[existingProductIndex] = productToUpdate;
-                
-                toast({ title: 'Sucesso!', description: 'Movimentação registrada.', className: 'bg-accent text-accent-foreground' });
-                return updatedProducts;
-            }
-        });
+            productToUpdate.quantity = type === 'purchase' 
+                ? productToUpdate.quantity + quantity 
+                : productToUpdate.quantity - quantity;
+            
+            productToUpdate.history = [newHistoryEntry, ...productToUpdate.history];
+            updatedProducts[existingProductIndex] = productToUpdate;
+            
+            setProducts(updatedProducts);
+            toast({ title: 'Sucesso!', description: 'Movimentação registrada.', className: 'bg-accent text-accent-foreground' });
+        }
     };
 
     const handleEditProduct = (data: EditProductFormValues) => {

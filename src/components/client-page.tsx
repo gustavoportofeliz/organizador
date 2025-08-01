@@ -61,6 +61,13 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
+const getClientTotals = (client: Client) => {
+    const totalPurchases = client.purchases.reduce((sum, p) => sum + p.totalValue, 0);
+    const totalPayments = client.payments.reduce((sum, p) => sum + p.amount, 0);
+    const balance = totalPurchases - totalPayments;
+    return { totalPurchases, totalPayments, balance };
+}
+
 export function ClientPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -224,13 +231,6 @@ export function ClientPage() {
     setDeleteConfirmOpen(true);
   };
 
-  const getClientTotals = (client: Client) => {
-    const totalPurchases = client.purchases.reduce((sum, p) => sum + p.totalValue, 0);
-    const totalPayments = client.payments.reduce((sum, p) => sum + p.amount, 0);
-    const balance = totalPurchases - totalPayments;
-    return { totalPurchases, totalPayments, balance };
-  }
-  
   const filteredClients = useMemo(() => {
     if (isLoading) return [];
     return clients.filter(client => {

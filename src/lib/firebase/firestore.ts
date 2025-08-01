@@ -24,9 +24,10 @@ import type { AddProductFormValues } from '@/components/add-product-dialog';
 import type { EditProductFormValues } from '@/components/edit-product-dialog';
 import type { AddRelativeFormValues } from '@/components/add-relative-dialog';
 import { addDays } from 'date-fns';
+import { app } from './firebase'; // Import app
 
 const getUserId = () => {
-    const auth = getAuth();
+    const auth = getAuth(app); // Use getAuth(app) to ensure it's initialized
     const user = auth.currentUser;
     if (!user) throw new Error("Usuário não autenticado. Acesso negado.");
     return user.uid;
@@ -88,11 +89,12 @@ export const getClient = async (id: string): Promise<Client> => {
 
 export const addClient = async (data: AddClientFormValues) => {
   const userId = getUserId();
-  const clientRef = doc(collection(db, `users/${userId}/clients`));
-  const clientId = clientRef.id;
 
   try {
     await runTransaction(db, async (transaction) => {
+      const clientRef = doc(collection(db, `users/${userId}/clients`));
+      const clientId = clientRef.id;
+
       // 1. Set Client Data
       transaction.set(clientRef, {
         id: clientId,
@@ -154,7 +156,9 @@ export const addClient = async (data: AddClientFormValues) => {
 
     // 3. Update Product Stock (occurs only after the transaction is successful)
     if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
-        await updateProductStock(data.purchaseItem, 1, data.name, data.purchaseValue, clientId);
+        const clientSnap = await getDoc(doc(db, `users/${userId}/clients`, data.name));
+        const clientName = clientSnap.exists() ? clientSnap.data().name : data.name;
+        await updateProductStock(data.purchaseItem, 1, clientName, data.purchaseValue, data.name);
     }
   } catch (e) {
       console.error("Transaction failed: ", e);
@@ -327,7 +331,7 @@ export const updateProductStock = async (productName: string, quantitySold: numb
     const userId = getUserId();
     await runTransaction(db, async (transaction) => {
         const q = query(productsCollection(), where("name", "==", productName));
-        const productSnapshotDocs = (await transaction.get(q)).docs;
+        const productSnapshotDocs = (await getDocs(q)).docs;
         
         if (productSnapshotDocs.length === 0) {
             console.warn(`Produto "${productName}" não encontrado no estoque. Venda registrada sem atualização de estoque.`);

@@ -13,13 +13,15 @@ export type Purchase = {
   totalValue: number;
   installments: Installment[];
   date: string;
+  clientId: string;
 };
 
 export type Payment = {
   id: string;
   amount: number;
   date: string;
-  installmentId?: string; 
+  installmentId?: string;
+  clientId: string;
 };
 
 export type Relative = {
@@ -38,17 +40,17 @@ export type Client = {
   birthDate?: string;
   address?: string;
   neighborhood?: string;
-  childrenInfo?: string; // Alterado para texto para aceitar quantidade ou nomes
-  preferences?: string; // Mantido como texto para nomes de produtos
+  childrenInfo?: string; 
+  preferences?: string; 
   purchases: Purchase[];
   payments: Payment[];
-  relatives?: Relative[];
+  relatives: Relative[];
 };
 
 export type ProductHistoryEntry = {
     id: string;
     date: string;
-    type: 'purchase' | 'sale'; // Compra da loja ou venda para cliente
+    type: 'purchase' | 'sale';
     quantity: number;
     unitPrice: number;
     notes?: string;

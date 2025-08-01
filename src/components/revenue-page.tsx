@@ -1,8 +1,8 @@
 'use client';
-import { useState, useMemo, useEffect } from 'react';
-import type { Client, Purchase, Installment } from '@/lib/types';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import type { Client } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { DollarSign, CheckCircle } from 'lucide-react';
+import { DollarSign, CheckCircle, Loader2 } from 'lucide-react';
 import {
     Table,
     TableBody,
@@ -11,6 +11,8 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { getClients } from '@/lib/firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('pt-BR', {
@@ -27,15 +29,25 @@ const getMonthYear = (dateString?: string) => {
 
 export function RevenuePage() {
     const [clients, setClients] = useState<Client[]>([]);
-    const [isClientMounted, setIsClientMounted] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const { toast } = useToast();
+
+    const fetchClients = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const clientsData = await getClients();
+            setClients(clientsData);
+        } catch (error) {
+            console.error("Error fetching clients:", error);
+            toast({ variant: "destructive", title: "Erro ao buscar dados de faturamento" });
+        } finally {
+            setIsLoading(false);
+        }
+    }, [toast]);
 
     useEffect(() => {
-        const storedClients = localStorage.getItem('clients');
-        if (storedClients) {
-            setClients(JSON.parse(storedClients));
-        }
-        setIsClientMounted(true);
-    }, []);
+        fetchClients();
+    }, [fetchClients]);
 
     const monthlyData = useMemo(() => {
         const data: { 
@@ -102,8 +114,12 @@ export function RevenuePage() {
         }, 0);
     }, [clients]);
 
-    if (!isClientMounted) {
-        return null;
+    if (isLoading) {
+        return (
+          <div className="flex justify-center items-center min-h-screen">
+            <Loader2 className="h-16 w-16 animate-spin" />
+          </div>
+        );
     }
 
     return (

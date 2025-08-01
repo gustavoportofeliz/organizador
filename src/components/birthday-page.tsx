@@ -1,15 +1,17 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { Client, Relative } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Gift, PlusCircle, Users } from 'lucide-react';
+import { Gift, PlusCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isToday, isFuture, differenceInDays, parse, isValid, getMonth } from 'date-fns';
 import { AddRelativeDialog, type AddRelativeFormValues } from '@/components/add-relative-dialog';
 import { Button } from './ui/button';
+import { getClients, addRelative } from '@/lib/firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
 
 interface BirthdayPerson {
     id: string;
@@ -22,44 +24,37 @@ interface BirthdayPerson {
 
 export function BirthdayPage() {
     const [clients, setClients] = useState<Client[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [isClientMounted, setIsClientMounted] = useState(false);
     const [isAddRelativeOpen, setAddRelativeOpen] = useState(false);
+    const { toast } = useToast();
 
-    useEffect(() => {
-        const storedClients = localStorage.getItem('clients');
-        if (storedClients) {
-            setClients(JSON.parse(storedClients));
+    const fetchClients = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const clientsData = await getClients();
+            setClients(clientsData);
+        } catch (error) {
+            console.error("Error fetching clients:", error);
+            toast({ variant: "destructive", title: "Erro ao buscar clientes" });
+        } finally {
+            setIsLoading(false);
         }
-        setIsClientMounted(true);
-    }, []);
+    }, [toast]);
     
     useEffect(() => {
-        if(isClientMounted) {
-            localStorage.setItem('clients', JSON.stringify(clients));
-        }
-    }, [clients, isClientMounted]);
+        fetchClients();
+    }, [fetchClients]);
 
-    const handleAddRelative = (data: AddRelativeFormValues) => {
-        const { client: clientId, name, birthDate, relationship } = data;
-    
-        setClients(prevClients => {
-            return prevClients.map(c => {
-                if (c.id === clientId) {
-                    const newRelative: Relative = {
-                        id: crypto.randomUUID(),
-                        name,
-                        birthDate,
-                        relationship,
-                        clientId: c.id,
-                        clientName: c.name,
-                    };
-                    const updatedRelatives = [...(c.relatives || []), newRelative];
-                    return { ...c, relatives: updatedRelatives };
-                }
-                return c;
-            });
-        });
+    const handleAddRelative = async (data: AddRelativeFormValues) => {
+        try {
+            await addRelative(data.client, data);
+            toast({ title: 'Sucesso!', description: 'Novo parente adicionado.', className: 'bg-accent text-accent-foreground' });
+            fetchClients();
+        } catch (error) {
+            console.error("Error adding relative:", error);
+            toast({ variant: "destructive", title: "Erro!", description: "Não foi possível adicionar o parente." });
+        }
     };
     
 
@@ -152,8 +147,12 @@ export function BirthdayPage() {
             });
     }, [birthdayPeople, searchTerm]);
 
-    if (!isClientMounted) {
-        return null; // Or a loading spinner
+    if (isLoading) {
+        return (
+          <div className="flex justify-center items-center min-h-screen">
+            <Loader2 className="h-16 w-16 animate-spin" />
+          </div>
+        );
     }
 
     const getDaysUntilText = (days: number, status: string, nextBirthday: Date) => {

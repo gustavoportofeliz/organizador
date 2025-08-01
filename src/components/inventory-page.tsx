@@ -1,6 +1,6 @@
 'use client';
-import { useState, useMemo, useEffect } from 'react';
-import type { Product, ProductHistoryEntry } from '@/lib/types';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import type { Product } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,7 @@ import {
   MoreVertical,
   Edit,
   Trash2,
+  Loader2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -37,6 +38,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { addProduct, getProducts, editProduct as editProductInDb, deleteProduct as deleteProductFromDb } from '@/lib/firebase/firestore';
   
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -58,7 +60,7 @@ const formatDate = (dateString: string) => {
 
 export function InventoryPage() {
     const [products, setProducts] = useState<Product[]>([]);
-    const [isClientMounted, setIsClientMounted] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const [isAddProductOpen, setAddProductOpen] = useState(false);
     const [isEditProductOpen, setEditProductOpen] = useState(false);
     const [isDeleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -66,83 +68,66 @@ export function InventoryPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const { toast } = useToast();
 
-    useEffect(() => {
-        const storedProducts = localStorage.getItem('products');
-        if (storedProducts) {
-            setProducts(JSON.parse(storedProducts));
+    const fetchProducts = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const productsData = await getProducts();
+            setProducts(productsData);
+        } catch (error) {
+            console.error("Error fetching products:", error);
+            toast({ variant: "destructive", title: "Erro ao buscar produtos", description: "Não foi possível carregar os produtos do banco de dados." });
+        } finally {
+            setIsLoading(false);
         }
-        setIsClientMounted(true);
-    }, []);
+    }, [toast]);
 
     useEffect(() => {
-        if(isClientMounted) {
-            localStorage.setItem('products', JSON.stringify(products));
-        }
-    }, [products, isClientMounted]);
+        fetchProducts();
+    }, [fetchProducts]);
 
-    const handleAddProduct = (data: AddProductFormValues) => {
-        const { name, quantity, unitPrice, type, isNewProduct } = data;
-      
-        if (type === 'sale' && isNewProduct) {
+    const handleAddProduct = async (data: AddProductFormValues) => {
+        const { name, type, isNewProduct } = data;
+        const existingProduct = products.find(p => p.name.toLowerCase() === name.toLowerCase());
+
+        if (type === 'sale' && (isNewProduct || !existingProduct)) {
           toast({ variant: 'destructive', title: 'Erro!', description: 'Não é possível vender um produto que não existe no estoque.' });
           return;
         }
-      
-        const newHistoryEntry: ProductHistoryEntry = {
-          id: crypto.randomUUID(),
-          date: new Date().toISOString(),
-          type: type,
-          quantity: quantity,
-          unitPrice: unitPrice,
-          notes: type === 'purchase' ? 'Compra de estoque' : 'Venda manual',
-        };
-      
-        setProducts(prevProducts => {
-            const existingProductIndex = prevProducts.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
-          
-            if (existingProductIndex === -1) {
-              const newProduct: Product = {
-                id: crypto.randomUUID(),
-                name: name,
-                quantity: type === 'purchase' ? quantity : -quantity,
-                history: [newHistoryEntry],
-                createdAt: new Date().toISOString(),
-              };
-              toast({ title: 'Sucesso!', description: 'Novo produto adicionado.', className: 'bg-accent text-accent-foreground' });
-              return [newProduct, ...prevProducts];
-            } else {
-              const updatedProducts = [...prevProducts];
-              const productToUpdate = { ...updatedProducts[existingProductIndex] };
-      
-              productToUpdate.quantity = type === 'purchase' 
-                  ? productToUpdate.quantity + quantity 
-                  : productToUpdate.quantity - quantity;
-              
-              productToUpdate.history = [newHistoryEntry, ...productToUpdate.history];
-              updatedProducts[existingProductIndex] = productToUpdate;
-              
-              toast({ title: 'Sucesso!', description: 'Movimentação registrada.', className: 'bg-accent text-accent-foreground' });
-              return updatedProducts;
-            }
-        });
+
+        try {
+            await addProduct(data);
+            toast({ title: 'Sucesso!', description: 'Movimentação registrada.', className: 'bg-accent text-accent-foreground' });
+            fetchProducts();
+        } catch (error) {
+            console.error("Error adding product transaction:", error);
+            toast({ variant: 'destructive', title: 'Erro!', description: 'Não foi possível registrar a movimentação.' });
+        }
       };
 
-    const handleEditProduct = (data: EditProductFormValues) => {
+    const handleEditProduct = async (data: EditProductFormValues) => {
         if (!selectedProduct) return;
-        setProducts(prev => 
-          prev.map(p => 
-            p.id === selectedProduct.id ? { ...p, name: data.name } : p
-          )
-        );
-        toast({ title: 'Sucesso!', description: 'Nome do produto atualizado.', className: 'bg-accent text-accent-foreground' });
-        setEditProductOpen(false);
+        try {
+            await editProductInDb(selectedProduct.id, data);
+            toast({ title: 'Sucesso!', description: 'Nome do produto atualizado.', className: 'bg-accent text-accent-foreground' });
+            fetchProducts();
+            setEditProductOpen(false);
+        } catch (error) {
+            console.error("Error editing product:", error);
+            toast({ variant: 'destructive', title: 'Erro!', description: 'Não foi possível editar o produto.' });
+        }
     };
 
-    const handleDeleteProduct = () => {
+    const handleDeleteProduct = async () => {
         if (!selectedProduct) return;
-        setProducts(prev => prev.filter(p => p.id !== selectedProduct.id));
-        toast({ title: 'Sucesso!', description: 'Produto removido.', className: 'bg-destructive text-destructive-foreground' });
-        setDeleteConfirmOpen(false);
+        try {
+            await deleteProductFromDb(selectedProduct.id);
+            toast({ title: 'Sucesso!', description: 'Produto removido.', className: 'bg-destructive text-destructive-foreground' });
+            fetchProducts();
+            setDeleteConfirmOpen(false);
+        } catch (error) {
+            console.error("Error deleting product:", error);
+            toast({ variant: 'destructive', title: 'Erro!', description: 'Não foi possível remover o produto.' });
+        }
     };
     
     const openEditDialog = (product: Product) => {
@@ -169,16 +154,18 @@ export function InventoryPage() {
             const search = searchTerm.toLowerCase();
             return product.name.toLowerCase().includes(search);
         }).sort((a, b) => {
-            // Prioritize negative stock
             if (a.quantity < 0 && b.quantity >= 0) return -1;
             if (b.quantity < 0 && a.quantity >= 0) return 1;
-            // Then sort by most recent
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         });
     }, [products, searchTerm]);
 
-    if (!isClientMounted) {
-        return null; // Or a loading spinner
+    if (isLoading) {
+        return (
+          <div className="flex justify-center items-center min-h-screen">
+            <Loader2 className="h-16 w-16 animate-spin" />
+          </div>
+        );
     }
 
     return (
@@ -234,8 +221,8 @@ export function InventoryPage() {
                             {filteredProducts.map(product => (
                                 <AccordionItem value={product.id} key={product.id} className={cn(product.quantity < 0 && 'bg-red-50 dark:bg-red-900/20')}>
                                     <div className="flex items-center w-full p-4">
-                                        <AccordionTrigger className="flex-1 p-0 hover:no-underline text-left">
-                                             <span className="font-medium text-lg">{product.name}</span>
+                                        <AccordionTrigger className="flex-1 p-0 hover:no-underline text-left justify-start">
+                                            <span className="font-medium text-lg">{product.name}</span>
                                         </AccordionTrigger>
                                         <div className="flex items-center gap-4 text-sm text-right ml-auto pl-4">
                                             <span className="text-muted-foreground">

@@ -35,13 +35,23 @@ import {
   Trash2,
   Edit,
   Search,
+  Loader2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { addDays, format, parseISO } from 'date-fns';
+import { 
+  addClient, 
+  addTransaction, 
+  deleteClient as deleteClientFromDb, 
+  editClient as editClientInDb, 
+  getClient, 
+  getClients, 
+  payInstallment as payInstallmentInDb,
+  getProducts,
+  updateProductStock as updateProductStockInDb
+} from '@/lib/firebase/firestore';
 
-
-const initialClientsData: Client[] = [];
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('pt-BR', {
@@ -53,7 +63,7 @@ const formatCurrency = (amount: number) => {
 export function ClientPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [isClientMounted, setIsClientMounted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isAddClientOpen, setAddClientOpen] = useState(false);
   const [isAddTransactionOpen, setAddTransactionOpen] = useState(false);
   const [isViewHistoryOpen, setViewHistoryOpen] = useState(false);
@@ -86,27 +96,27 @@ export function ClientPage() {
     }));
   }, []);
 
-  useEffect(() => {
-    const storedClients = localStorage.getItem('clients');
-    const initialClients = storedClients ? JSON.parse(storedClients) : initialClientsData;
-    const storedProducts = localStorage.getItem('products');
-    if (storedProducts) {
-        setProducts(JSON.parse(storedProducts));
+  const fetchAllData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const [clientsData, productsData] = await Promise.all([getClients(), getProducts()]);
+      setClients(updateInstallmentStatuses(clientsData));
+      setProducts(productsData);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      toast({ variant: "destructive", title: "Erro ao buscar dados", description: "Não foi possível carregar as informações do banco de dados." });
+    } finally {
+      setIsLoading(false);
     }
-    setClients(updateInstallmentStatuses(initialClients));
-    setIsClientMounted(true);
-  }, [updateInstallmentStatuses]);
+  }, [toast, updateInstallmentStatuses]);
 
   useEffect(() => {
-    if(isClientMounted) {
-      localStorage.setItem('clients', JSON.stringify(clients));
-      localStorage.setItem('products', JSON.stringify(products));
-      const interval = setInterval(() => {
-        setClients(prevClients => updateInstallmentStatuses(prevClients));
-      }, 60000); // Check for overdue installments every minute
-      return () => clearInterval(interval);
-    }
-  }, [clients, products, isClientMounted, updateInstallmentStatuses]);
+    fetchAllData();
+    const interval = setInterval(() => {
+      setClients(prevClients => updateInstallmentStatuses(prevClients));
+    }, 60000); // Check for overdue installments every minute
+    return () => clearInterval(interval);
+  }, [fetchAllData, updateInstallmentStatuses]);
 
 
   const totalOutstandingBalance = useMemo(() => {
@@ -121,127 +131,42 @@ export function ClientPage() {
     }, 0);
   }, [clients]);
 
-  const handleAddClient = (data: AddClientFormValues) => {
-    const newClient: Client = {
-      id: crypto.randomUUID(),
-      name: data.name,
-      phone: data.phone,
-      birthDate: data.birthDate,
-      address: data.address,
-      neighborhood: data.neighborhood,
-      childrenInfo: data.childrenInfo,
-      preferences: data.preferences,
-      purchases: [],
-      payments: [],
-      relatives: [],
-    };
-
-    if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
-        const newPurchase: Purchase = {
-            id: crypto.randomUUID(),
-            item: data.purchaseItem,
-            totalValue: data.purchaseValue,
-            date: new Date().toISOString(),
-            installments: [],
-        };
-        
-        const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
-        const installmentValue = data.purchaseValue / installmentsCount;
-        const intervalDays = data.installmentInterval || 30;
-
-        for (let i = 0; i < installmentsCount; i++) {
-            const dueDate = addDays(new Date(), (i + 1) * intervalDays);
-            newPurchase.installments.push({
-                id: crypto.randomUUID(),
-                installmentNumber: i + 1,
-                value: installmentValue,
-                dueDate: dueDate.toISOString(),
-                status: 'pending',
-            });
-        }
-        newClient.purchases.push(newPurchase);
-        updateProductStock(data.purchaseItem, 1, newClient.name, installmentValue);
+  const handleAddClient = async (data: AddClientFormValues) => {
+    try {
+      await addClient(data);
+      toast({ title: 'Sucesso!', description: 'Novo cliente adicionado.', className: 'bg-accent text-accent-foreground' });
+      fetchAllData();
+    } catch (error) {
+      console.error("Error adding client:", error);
+      toast({ variant: "destructive", title: "Erro!", description: "Não foi possível adicionar o cliente." });
     }
-
-    if (data.paymentAmount && data.paymentAmount > 0) {
-      // Find the first pending installment and apply the payment
-      let remainingPayment = data.paymentAmount;
-      for (const purchase of newClient.purchases) {
-        if (remainingPayment <= 0) break;
-        for (const installment of purchase.installments) {
-          if (remainingPayment <= 0) break;
-          if (installment.status === 'pending' && remainingPayment >= installment.value) {
-            remainingPayment -= installment.value;
-            installment.status = 'paid';
-            installment.paidDate = new Date().toISOString();
-             newClient.payments.push({
-                id: crypto.randomUUID(),
-                amount: installment.value,
-                date: new Date().toISOString(),
-                installmentId: installment.id,
-            });
-          }
-        }
-      }
-    }
-    setClients(prev => [newClient, ...prev]);
-    toast({ title: 'Sucesso!', description: 'Novo cliente adicionado.', className: 'bg-accent text-accent-foreground' });
   };
   
-  const handleEditClient = (data: EditClientFormValues) => {
+  const handleEditClient = async (data: EditClientFormValues) => {
     if (!selectedClient) return;
-    setClients(prev => 
-      prev.map(c => 
-        c.id === selectedClient.id ? { ...c, ...data } : c
-      )
-    );
-    toast({ title: 'Sucesso!', description: 'Dados do cliente atualizados.', className: 'bg-accent text-accent-foreground' });
+    try {
+      await editClientInDb(selectedClient.id, data);
+      toast({ title: 'Sucesso!', description: 'Dados do cliente atualizados.', className: 'bg-accent text-accent-foreground' });
+      fetchAllData();
+    } catch (error) {
+       console.error("Error editing client:", error);
+       toast({ variant: "destructive", title: "Erro!", description: "Não foi possível atualizar o cliente." });
+    }
   };
 
-  const handleDeleteClient = () => {
+  const handleDeleteClient = async () => {
     if (!selectedClient) return;
-    setClients(prev => prev.filter(c => c.id !== selectedClient.id));
-    toast({ title: 'Sucesso!', description: 'Cliente removido.', className: 'bg-destructive text-destructive-foreground' });
+    try {
+      await deleteClientFromDb(selectedClient.id);
+      toast({ title: 'Sucesso!', description: 'Cliente removido.', className: 'bg-destructive text-destructive-foreground' });
+      fetchAllData();
+    } catch (error) {
+       console.error("Error deleting client:", error);
+       toast({ variant: "destructive", title: "Erro!", description: "Não foi possível remover o cliente." });
+    }
   };
-  
-  const updateProductStock = (productName: string, quantitySold: number, clientName: string, unitPrice: number) => {
-      setProducts(prevProducts => {
-        const productIndex = prevProducts.findIndex(p => p.name.toLowerCase() === productName.toLowerCase());
-        if (productIndex === -1) {
-          toast({ variant: 'destructive', title: 'Erro!', description: `Produto "${productName}" não encontrado no estoque.` });
-          return prevProducts;
-        }
-    
-        const updatedProducts = [...prevProducts];
-        const productToUpdate = { ...updatedProducts[productIndex] };
-    
-        if (productToUpdate.quantity < quantitySold) {
-          toast({
-            variant: "destructive",
-            title: "Estoque insuficiente!",
-            description: `Só existem ${productToUpdate.quantity} unidades de ${productName}.`,
-          })
-        }
-    
-        productToUpdate.quantity -= quantitySold;
-    
-        const newHistoryEntry: ProductHistoryEntry = {
-          id: crypto.randomUUID(),
-          date: new Date().toISOString(),
-          type: 'sale',
-          quantity: quantitySold,
-          unitPrice: unitPrice,
-          notes: `Venda para ${clientName}`,
-          clientName: clientName
-        };
-        productToUpdate.history = [newHistoryEntry, ...productToUpdate.history];
-    
-        updatedProducts[productIndex] = productToUpdate;
-        return updatedProducts;
-      });
-  }
 
-  const handleAddTransaction = (data: AddTransactionFormValues) => {
+  const handleAddTransaction = async (data: AddTransactionFormValues) => {
     if (!selectedClient) return;
   
     const productInStock = products.find(p => p.name.toLowerCase() === data.item.toLowerCase());
@@ -254,88 +179,34 @@ export function ClientPage() {
       return;
     }
   
-    setClients(prev =>
-      prev.map(c => {
-        if (c.id === selectedClient.id) {
-          const updatedClient = { ...c, purchases: [...c.purchases] };
-          const newPurchase: Purchase = {
-            id: crypto.randomUUID(),
-            item: data.item,
-            totalValue: data.amount,
-            date: new Date().toISOString(),
-            installments: [],
-          };
-  
-          const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
-          const installmentValue = data.amount / installmentsCount;
-          const intervalDays = data.installmentInterval || 30;
-  
-          for (let i = 0; i < installmentsCount; i++) {
-            const dueDate = addDays(new Date(), (i + 1) * intervalDays);
-            newPurchase.installments.push({
-              id: crypto.randomUUID(),
-              installmentNumber: i + 1,
-              value: installmentValue,
-              dueDate: dueDate.toISOString(),
-              status: 'pending',
-            });
-          }
-  
-          updatedClient.purchases.push(newPurchase);
-          if (selectedClient && selectedClient.id === updatedClient.id) {
-            setSelectedClient(updatedClient);
-          }
-          updateProductStock(data.item, 1, updatedClient.name, installmentValue);
-          return updatedClient;
-        }
-        return c;
-      })
-    );
-    toast({ title: 'Sucesso!', description: 'Nova compra registrada.', className: 'bg-accent text-accent-foreground' });
+    try {
+      await addTransaction(selectedClient.id, data);
+      toast({ title: 'Sucesso!', description: 'Nova compra registrada.', className: 'bg-accent text-accent-foreground' });
+      fetchAllData();
+      if(selectedClient){
+        const updatedClient = await getClient(selectedClient.id);
+        setSelectedClient(updatedClient);
+      }
+    } catch (error) {
+      console.error("Error adding transaction:", error);
+      toast({ variant: "destructive", title: "Erro!", description: "Não foi possível registrar a compra." });
+    }
   };
 
   
-  const handlePayInstallment = (clientId: string, purchaseId: string, installmentId: string) => {
-    setClients(prevClients => {
-      const updatedClients = prevClients.map(client => {
-        if (client.id === clientId) {
-          const newClient = { ...client };
-          let paidAmount = 0;
-          let paidDate = new Date().toISOString();
-          newClient.purchases = newClient.purchases.map(purchase => {
-            if (purchase.id === purchaseId) {
-              const newPurchase = { ...purchase };
-              newPurchase.installments = newPurchase.installments.map(inst => {
-                if (inst.id === installmentId && inst.status !== 'paid') {
-                  paidAmount = inst.value;
-                  return { ...inst, status: 'paid', paidDate: paidDate };
-                }
-                return inst;
-              });
-              return newPurchase;
-            }
-            return purchase;
-          });
-          
-          if(paidAmount > 0) {
-            newClient.payments.push({
-                id: crypto.randomUUID(),
-                amount: paidAmount,
-                date: paidDate,
-                installmentId: installmentId,
-            });
-          }
-
-           if (selectedClient && selectedClient.id === newClient.id) {
-            setSelectedClient(newClient);
-          }
-          return newClient;
-        }
-        return client;
-      });
-      return updateInstallmentStatuses(updatedClients);
-    });
-    toast({ title: 'Sucesso!', description: 'Parcela quitada.', className: 'bg-accent text-accent-foreground' });
+  const handlePayInstallment = async (clientId: string, purchaseId: string, installmentId: string) => {
+    try {
+      await payInstallmentInDb(clientId, purchaseId, installmentId);
+      toast({ title: 'Sucesso!', description: 'Parcela quitada.', className: 'bg-accent text-accent-foreground' });
+      fetchAllData();
+       if(selectedClient){
+        const updatedClient = await getClient(selectedClient.id);
+        setSelectedClient(updatedClient);
+      }
+    } catch(error) {
+      console.error("Error paying installment:", error);
+      toast({ variant: "destructive", title: "Erro!", description: "Não foi possível quitar a parcela." });
+    }
   };
 
   const openTransactionDialog = (client: Client) => {
@@ -380,8 +251,12 @@ export function ClientPage() {
   }, [clients, searchTerm]);
 
 
-  if (!isClientMounted) {
-    return null; // Or a loading spinner
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <Loader2 className="h-16 w-16 animate-spin" />
+      </div>
+    );
   }
 
   return (

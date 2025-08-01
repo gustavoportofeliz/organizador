@@ -1,5 +1,4 @@
 
-
 import { db } from './firebase'; 
 import {
   collection,
@@ -13,7 +12,6 @@ import {
   runTransaction,
   query,
   where,
-  documentId,
   setDoc,
 } from 'firebase/firestore';
 import type { Client, Product, Purchase, Payment, Relative, ProductHistoryEntry } from '../types';
@@ -27,16 +25,24 @@ import { addDays } from 'date-fns';
 
 const DATA_ROOT_PATH = 'data/v1';
 
-// References that point to a single data root
-const clientsCollection = () => collection(db, `${DATA_ROOT_PATH}/clients`);
-const productsCollection = () => collection(db, `${DATA_ROOT_PATH}/products`);
+const getScopedPath = () => {
+  // Since auth is removed, we use a static path.
+  // In a real multi-user app, this would be replaced by the user's ID.
+  const staticUserId = 'shared_user';
+  return `${DATA_ROOT_PATH}/users/${staticUserId}`;
+};
+
+// References that point to a single data root for the static user
+const clientsCollection = () => collection(db, `${getScopedPath()}/clients`);
+const productsCollection = () => collection(db, `${getScopedPath()}/products`);
 
 
 // Helper to get all subcollections for a client
 const getClientSubcollections = async (clientId: string) => {
-    const purchasesRef = collection(db, `${DATA_ROOT_PATH}/clients/${clientId}/purchases`);
-    const paymentsRef = collection(db, `${DATA_ROOT_PATH}/clients/${clientId}/payments`);
-    const relativesRef = collection(db, `${DATA_ROOT_PATH}/clients/${clientId}/relatives`);
+    const path = getScopedPath();
+    const purchasesRef = collection(db, `${path}/clients/${clientId}/purchases`);
+    const paymentsRef = collection(db, `${path}/clients/${clientId}/payments`);
+    const relativesRef = collection(db, `${path}/clients/${clientId}/relatives`);
 
     const [purchasesSnap, paymentsSnap, relativesSnap] = await Promise.all([
         getDocs(purchasesRef),
@@ -84,11 +90,9 @@ export const getClient = async (id: string): Promise<Client> => {
 export const addClient = async (data: AddClientFormValues) => {
   try {
     await runTransaction(db, async (transaction) => {
-      // Generate IDs upfront
       const clientRef = doc(clientsCollection());
       const clientId = clientRef.id;
 
-      // 1. Set Client Data
       transaction.set(clientRef, {
         id: clientId,
         name: data.name,
@@ -100,9 +104,9 @@ export const addClient = async (data: AddClientFormValues) => {
         preferences: data.preferences || '',
       });
 
-      // 2. Handle Initial Purchase and Payment
       if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
-        const purchaseRef = doc(collection(db, `${DATA_ROOT_PATH}/clients/${clientId}/purchases`));
+        const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
+        const purchaseRef = doc(collection(db, purchasePath));
         const purchaseId = purchaseRef.id;
         const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
         const installmentValue = data.purchaseValue / installmentsCount;
@@ -124,8 +128,8 @@ export const addClient = async (data: AddClientFormValues) => {
 
         if (data.paymentAmount && data.paymentAmount > 0) {
           let remainingPayment = data.paymentAmount;
-
-          const paymentRef = doc(collection(db, `${DATA_ROOT_PATH}/clients/${clientId}/payments`));
+          const paymentPath = `${getScopedPath()}/clients/${clientId}/payments`;
+          const paymentRef = doc(collection(db, paymentPath));
           transaction.set(paymentRef, {
             id: paymentRef.id,
             clientId: clientId,
@@ -147,14 +151,12 @@ export const addClient = async (data: AddClientFormValues) => {
       }
     });
 
-    // 3. Update Product Stock (occurs only after the transaction is successful)
     if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
-        // We need to fetch the client name from the form data as the client might not exist in db yet
-        await updateProductStock(data.purchaseItem, 1, data.name, data.purchaseValue, data.name);
+        await updateProductStock(data.purchaseItem, 1, data.name, data.purchaseValue, clientRef.id);
     }
   } catch (e) {
       console.error("Transaction failed: ", e);
-      throw e; // Re-throw the error to be caught by the UI
+      throw e;
   }
 };
 
@@ -166,22 +168,19 @@ export const editClient = async (id: string, data: EditClientFormValues) => {
 
 export const deleteClient = async (id: string) => {
     const clientRef = doc(clientsCollection(), id);
-    // Note: This does not delete subcollections. For a production app,
-    // you'd need a Cloud Function to handle cascading deletes.
     await deleteDoc(clientRef);
 };
 
 export const addTransaction = async (clientId: string, data: AddTransactionFormValues) => {
-    const clientRef = doc(db, `${DATA_ROOT_PATH}/clients`, clientId);
+    const clientRef = doc(clientsCollection(), clientId);
     const clientSnap = await getDoc(clientRef);
     if (!clientSnap.exists()) {
         throw new Error("Client not found");
     }
     const clientName = clientSnap.data()?.name || 'Cliente';
-
-    // Create the purchase record first
+    const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
+    const purchaseRef = doc(collection(db, purchasePath));
     const batch = writeBatch(db);
-    const purchaseRef = doc(collection(db, `${DATA_ROOT_PATH}/clients/${clientId}/purchases`));
     const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
     const installmentValue = data.amount / installmentsCount;
     const intervalDays = data.installmentInterval || 30;
@@ -203,13 +202,13 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
     
     await batch.commit();
 
-    // Then update stock
     await updateProductStock(data.item, 1, clientName, data.amount, clientId);
 };
 
 
 export const payInstallment = async (clientId: string, purchaseId: string, installmentId: string) => {
-    const purchaseRef = doc(db, `${DATA_ROOT_PATH}/clients/${clientId}/purchases`, purchaseId);
+    const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
+    const purchaseRef = doc(db, purchasePath, purchaseId);
     
     await runTransaction(db, async (transaction) => {
         const purchaseSnap = await transaction.get(purchaseRef);
@@ -230,7 +229,8 @@ export const payInstallment = async (clientId: string, purchaseId: string, insta
 
         if(isUpdated) {
             transaction.update(purchaseRef, { installments: updatedInstallments });
-            const paymentRef = doc(collection(db, `${DATA_ROOT_PATH}/clients/${clientId}/payments`));
+            const paymentPath = `${getScopedPath()}/clients/${clientId}/payments`;
+            const paymentRef = doc(collection(db, paymentPath));
             transaction.set(paymentRef, {
                 id: paymentRef.id,
                 clientId,
@@ -244,11 +244,12 @@ export const payInstallment = async (clientId: string, purchaseId: string, insta
 };
 
 export const addRelative = async (clientId: string, data: AddRelativeFormValues) => {
-    const clientRef = doc(db, `${DATA_ROOT_PATH}/clients`, clientId);
+    const clientRef = doc(clientsCollection(), clientId);
     const clientSnap = await getDoc(clientRef);
     if (!clientSnap.exists()) throw new Error("Client not found");
 
-    const relativeRef = doc(collection(db, `${DATA_ROOT_PATH}/clients/${clientId}/relatives`));
+    const relativePath = `${getScopedPath()}/clients/${clientId}/relatives`;
+    const relativeRef = doc(collection(db, relativePath));
     await setDoc(relativeRef, {
         id: relativeRef.id,
         clientId: clientId,
@@ -263,7 +264,8 @@ export const getProducts = async (): Promise<Product[]> => {
     const snapshot = await getDocs(productsCollection());
     const products: Product[] = await Promise.all(snapshot.docs.map(async (doc) => {
         const productData = { id: doc.id, ...doc.data() } as Omit<Product, 'history'>;
-        const historyRef = collection(db, `${DATA_ROOT_PATH}/products/${doc.id}/history`);
+        const historyPath = `${getScopedPath()}/products/${doc.id}/history`;
+        const historyRef = collection(db, historyPath);
         const historySnap = await getDocs(historyRef);
         const history = historySnap.docs.map(d => ({ id: d.id, ...d.data() } as ProductHistoryEntry))
                                      .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -301,7 +303,8 @@ export const addProduct = async (data: AddProductFormValues) => {
         
         transaction.update(productRef, { quantity: newQuantity });
         
-        const historyRef = doc(collection(db, `${DATA_ROOT_PATH}/products/${productRef.id}/history`));
+        const historyPath = `${getScopedPath()}/products/${productRef.id}/history`;
+        const historyRef = doc(collection(db, historyPath));
         const newHistoryEntry: Omit<ProductHistoryEntry, 'id'> = {
             date: new Date().toISOString(),
             type,
@@ -331,7 +334,8 @@ export const updateProductStock = async (productName: string, quantitySold: numb
         const newQuantity = currentQuantity - quantitySold;
         transaction.update(productRef, { quantity: newQuantity });
         
-        const historyRef = doc(collection(db, `${DATA_ROOT_PATH}/products/${productRef.id}/history`));
+        const historyPath = `${getScopedPath()}/products/${productRef.id}/history`;
+        const historyRef = doc(collection(db, historyPath));
         const newHistoryEntry: Omit<ProductHistoryEntry, 'id'> = {
             date: new Date().toISOString(),
             type: 'sale',
@@ -353,6 +357,5 @@ export const editProduct = async (id: string, data: EditProductFormValues) => {
 
 export const deleteProduct = async (id: string) => {
     const productRef = doc(productsCollection(), id);
-    // This also requires a Cloud Function for cascading delete of history subcollection
     await deleteDoc(productRef);
 };

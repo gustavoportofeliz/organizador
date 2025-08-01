@@ -6,6 +6,7 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Users, Calendar, Archive, DollarSign, PlusCircle, MoreHorizontal, Gift, Package, CheckCircle, HelpCircle } from "lucide-react";
 

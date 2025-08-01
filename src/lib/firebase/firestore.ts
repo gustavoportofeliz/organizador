@@ -76,11 +76,15 @@ export const getClient = async (id: string): Promise<Client> => {
 };
 
 export const addClient = async (data: AddClientFormValues) => {
-    const batch = writeBatch(db);
-    const clientRef = doc(collection(db, 'clients'));
+  // Generate IDs beforehand
+  const clientRef = doc(collection(db, 'clients'));
+  const clientId = clientRef.id;
 
-    batch.set(clientRef, {
-        id: clientRef.id,
+  try {
+    await runTransaction(db, async (transaction) => {
+      // 1. Set Client Data
+      transaction.set(clientRef, {
+        id: clientId,
         name: data.name,
         phone: data.phone || '',
         birthDate: data.birthDate || '',
@@ -88,61 +92,63 @@ export const addClient = async (data: AddClientFormValues) => {
         neighborhood: data.neighborhood || '',
         childrenInfo: data.childrenInfo || '',
         preferences: data.preferences || '',
-    });
+      });
 
-    if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
-        const purchaseRef = doc(collection(db, `clients/${clientRef.id}/purchases`));
+      // 2. Handle Initial Purchase and Payment
+      if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
+        const purchaseRef = doc(collection(db, `clients/${clientId}/purchases`));
+        const purchaseId = purchaseRef.id;
         const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
         const installmentValue = data.purchaseValue / installmentsCount;
         const intervalDays = data.installmentInterval || 30;
 
         const newPurchase: Omit<Purchase, 'id'> = {
-            clientId: clientRef.id,
-            item: data.purchaseItem,
-            totalValue: data.purchaseValue,
-            date: new Date().toISOString(),
-            installments: Array.from({ length: installmentsCount }, (_, i) => ({
-                id: crypto.randomUUID(),
-                installmentNumber: i + 1,
-                value: installmentValue,
-                dueDate: addDays(new Date(), i * intervalDays).toISOString(),
-                status: 'pending',
-            }))
+          clientId: clientId,
+          item: data.purchaseItem,
+          totalValue: data.purchaseValue,
+          date: new Date().toISOString(),
+          installments: Array.from({ length: installmentsCount }, (_, i) => ({
+            id: crypto.randomUUID(),
+            installmentNumber: i + 1,
+            value: installmentValue,
+            dueDate: addDays(new Date(), i * intervalDays).toISOString(),
+            status: 'pending',
+          })),
         };
-        
+
         if (data.paymentAmount && data.paymentAmount > 0) {
-            let remainingPayment = data.paymentAmount;
-            
-            const paymentRef = doc(collection(db, `clients/${clientRef.id}/payments`));
-             batch.set(paymentRef, {
-                id: paymentRef.id,
-                clientId: clientRef.id,
-                amount: data.paymentAmount,
-                date: new Date().toISOString(),
-                purchaseId: purchaseRef.id,
-            });
+          let remainingPayment = data.paymentAmount;
 
-            for (const installment of newPurchase.installments) {
-                if (remainingPayment <= 0) break;
-                
-                if (installment.status === 'pending' && remainingPayment >= installment.value) {
-                    remainingPayment -= installment.value;
-                    installment.status = 'paid';
-                    installment.paidDate = new Date().toISOString();
-                }
+          const paymentRef = doc(collection(db, `clients/${clientId}/payments`));
+          transaction.set(paymentRef, {
+            id: paymentRef.id,
+            clientId: clientId,
+            amount: data.paymentAmount,
+            date: new Date().toISOString(),
+            purchaseId: purchaseId,
+          });
+
+          for (const installment of newPurchase.installments) {
+            if (remainingPayment <= 0) break;
+            if (installment.status === 'pending' && remainingPayment >= installment.value) {
+              remainingPayment -= installment.value;
+              installment.status = 'paid';
+              installment.paidDate = new Date().toISOString();
             }
+          }
         }
-        
-        batch.set(purchaseRef, { ...newPurchase, id: purchaseRef.id });
-    }
-    
-    // First, commit the client and their initial purchase/payment data
-    await batch.commit();
+        transaction.set(purchaseRef, { ...newPurchase, id: purchaseId });
+      }
+    });
 
-    // After the client is created, update the product stock
+    // 3. Update Product Stock (occurs only after the transaction is successful)
     if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
-        await updateProductStock(data.purchaseItem, 1, data.name, data.purchaseValue, clientRef.id);
+        await updateProductStock(data.purchaseItem, 1, data.name, data.purchaseValue, clientId);
     }
+  } catch (e) {
+      console.error("Transaction failed: ", e);
+      throw e; // Re-throw the error to be caught by the UI
+  }
 };
 
 
@@ -304,14 +310,14 @@ export const addProduct = async (data: AddProductFormValues) => {
 export const updateProductStock = async (productName: string, quantitySold: number, clientName: string, unitPrice: number, clientId: string) => {
     await runTransaction(db, async (transaction) => {
         const q = query(productsCollection, where("name", "==", productName));
-        const productSnapshot = await getDocs(q);
+        const productSnapshotDocs = (await transaction.get(q)).docs;
         
-        if (productSnapshot.empty) {
+        if (productSnapshotDocs.length === 0) {
             console.warn(`Produto "${productName}" não encontrado no estoque. Venda registrada sem atualização de estoque.`);
             return;
         }
         
-        const productDoc = productSnapshot.docs[0];
+        const productDoc = productSnapshotDocs[0];
         const productRef = productDoc.ref;
         const currentQuantity = productDoc.data().quantity || 0;
         

@@ -1,7 +1,7 @@
 
 'use client';
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import type { Client } from '@/lib/types';
+import type { Client, Purchase, Installment } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { DollarSign, CheckCircle, Loader2 } from 'lucide-react';
 import {
@@ -25,9 +25,13 @@ const formatCurrency = (amount: number) => {
 const getMonthYear = (dateString?: string) => {
     if(!dateString) return 'Data inválida';
     const date = new Date(dateString);
-    const adjustedDate = new Date(date.valueOf() + date.getTimezoneOffset() * 60 * 1000);
-    return adjustedDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+    // Use UTC methods to avoid timezone shift issues
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth();
+    const displayDate = new Date(year, month, 15); // Use a mid-month day to be safe
+    return displayDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
 }
+
 
 export function RevenuePage() {
     const [clients, setClients] = useState<Client[]>([]);
@@ -82,9 +86,7 @@ export function RevenuePage() {
                 const [monthB, yearB] = b.split(' de ');
                 const dateA = new Date(parseInt(yearA), getMonthIndex(monthA));
                 const dateB = new Date(parseInt(yearB), getMonthIndex(monthB));
-                if (dateA > dateB) return -1;
-                if (dateA < dateB) return 1;
-                return 0;
+                return dateB.getTime() - dateA.getTime();
             });
 
     }, [clients]);
@@ -128,6 +130,16 @@ export function RevenuePage() {
             </Card>
 
             <div className="space-y-6">
+                {monthlyData.length === 0 && !isLoading && (
+                    <Card className="shadow-lg border-border">
+                        <CardContent className="pt-6">
+                            <p className="text-center text-muted-foreground col-span-full py-8">
+                                Nenhum dado de faturamento para exibir.
+                            </p>
+                        </CardContent>
+                    </Card>
+                )}
+
                 {monthlyData.map(([monthYear, data]) => (
                     <Card key={monthYear} className="shadow-lg border-border">
                         <CardHeader>
@@ -160,7 +172,7 @@ export function RevenuePage() {
                                                 <TableRow key={index}>
                                                     <TableCell>{detail.client}</TableCell>
                                                     <TableCell>
-                                                      {new Date(detail.date).toLocaleDateString('pt-BR')}
+                                                      {new Date(detail.date).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}
                                                     </TableCell>
                                                     <TableCell className="text-right">{formatCurrency(detail.value)}</TableCell>
                                                 </TableRow>
@@ -174,11 +186,16 @@ export function RevenuePage() {
                 ))}
             </div>
 
-            {monthlyData.length === 0 && (
-                <p className="text-center text-muted-foreground col-span-full py-8">
-                    Nenhum dado de faturamento para exibir.
-                </p>
+            {monthlyData.length === 0 && !isLoading && clients.length > 0 && totalDue === 0 && (
+                 <Card className="shadow-lg border-border">
+                    <CardContent className="pt-6">
+                        <p className="text-center text-muted-foreground col-span-full py-8">
+                            Nenhum pagamento foi registrado ainda.
+                        </p>
+                    </CardContent>
+                </Card>
             )}
+
 
         </div>
     )

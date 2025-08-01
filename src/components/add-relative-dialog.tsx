@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input';
 import { PlusCircle } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { Client } from '@/lib/types';
+import { format } from 'date-fns';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Nome deve ter pelo menos 2 caracteres.' }),
@@ -52,6 +53,16 @@ export function AddRelativeDialog({ open, onOpenChange, onAddRelative, clients }
   });
 
   const onSubmit = (data: AddRelativeFormValues) => {
+    if (data.birthDate) {
+        try {
+            const date = new Date(data.birthDate);
+            const tzoffset = (new Date()).getTimezoneOffset() * 60000;
+            const localDate = new Date(date.getTime() + tzoffset);
+            data.birthDate = format(localDate, 'dd/MM/yyyy');
+        } catch (e) {
+            console.error("Could not format date on submit:", data.birthDate);
+        }
+    }
     onAddRelative(data);
     onOpenChange(false);
     form.reset();

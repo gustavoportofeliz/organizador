@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input';
 import { Edit } from 'lucide-react';
 import type { Client } from '@/lib/types';
 import { useEffect } from 'react';
+import { parse, format } from 'date-fns';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Nome deve ter pelo menos 2 caracteres.' }),
@@ -51,12 +52,30 @@ export function EditClientDialog({ open, onOpenChange, onEditClient, client }: E
 
   useEffect(() => {
     if (client) {
-      // Format date to YYYY-MM-DD for the input type="date"
-      const birthDate = client.birthDate ? new Date(client.birthDate).toISOString().split('T')[0] : '';
+      let formattedBirthDate = '';
+      if (client.birthDate) {
+          try {
+              // Try parsing as DD/MM/YYYY first
+              let date = parse(client.birthDate, 'dd/MM/yyyy', new Date());
+              if (isNaN(date.getTime())) {
+                   // If that fails, try parsing as an ISO date (which is what input[type=date] produces)
+                   date = new Date(client.birthDate);
+              }
+              if (!isNaN(date.getTime())) {
+                  // Add timezone offset to prevent date from shifting
+                  const tzoffset = (new Date()).getTimezoneOffset() * 60000;
+                  const localISOTime = (new Date(date.getTime() - tzoffset)).toISOString().split('T')[0];
+                  formattedBirthDate = localISOTime;
+              }
+          } catch(e) {
+              console.error("Could not parse date:", client.birthDate);
+          }
+      }
+      
       form.reset({
         name: client.name,
         phone: client.phone || '',
-        birthDate: birthDate,
+        birthDate: formattedBirthDate,
         address: client.address || '',
         neighborhood: client.neighborhood || '',
         childrenInfo: client.childrenInfo || '',
@@ -66,6 +85,18 @@ export function EditClientDialog({ open, onOpenChange, onEditClient, client }: E
   }, [client, form, open]);
 
   const onSubmit = (data: EditClientFormValues) => {
+    // Reformat date back to dd/MM/yyyy if needed, or keep as is.
+    // Let's save as dd/MM/yyyy for consistency with the add form.
+    if (data.birthDate) {
+        try {
+            const date = new Date(data.birthDate);
+            const tzoffset = (new Date()).getTimezoneOffset() * 60000;
+            const localDate = new Date(date.getTime() + tzoffset);
+            data.birthDate = format(localDate, 'dd/MM/yyyy');
+        } catch(e) {
+            console.error("Could not format date on submit:", data.birthDate);
+        }
+    }
     onEditClient(data);
     onOpenChange(false);
   };

@@ -44,29 +44,21 @@ export function BirthdayPage() {
         const { client: clientId, name, birthDate, relationship } = data;
     
         setClients(prevClients => {
-            const newClients = prevClients.map(c => {
+            return prevClients.map(c => {
                 if (c.id === clientId) {
-                    const selectedClient = c;
-    
                     const newRelative: Relative = {
                         id: crypto.randomUUID(),
                         name,
                         birthDate,
                         relationship,
-                        clientId: selectedClient.id,
-                        clientName: selectedClient.name,
+                        clientId: c.id,
+                        clientName: c.name,
                     };
-    
-                    // Create a new relatives array by cloning the existing one (or starting fresh)
-                    // and adding the new relative.
-                    const updatedRelatives = [...(selectedClient.relatives || []), newRelative];
-    
-                    // Return a new client object with the updated relatives array.
-                    return { ...selectedClient, relatives: updatedRelatives };
+                    const updatedRelatives = [...(c.relatives || []), newRelative];
+                    return { ...c, relatives: updatedRelatives };
                 }
-                return c; // Return other clients unmodified.
+                return c;
             });
-            return newClients;
         });
     };
     
@@ -177,7 +169,7 @@ export function BirthdayPage() {
         if (status === 'month') {
             return "Aniversário este mês";
         }
-        return `Faltam ${days} dias`;
+        return ``;
     }
 
     return (

@@ -100,7 +100,7 @@ export function InventoryPage() {
         setProducts(prevProducts => {
             const existingProductIndex = prevProducts.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
           
-            if (isNewProduct) {
+            if (existingProductIndex === -1) {
               const newProduct: Product = {
                 id: crypto.randomUUID(),
                 name: name,
@@ -234,36 +234,36 @@ export function InventoryPage() {
                             {filteredProducts.map(product => (
                                 <AccordionItem value={product.id} key={product.id} className={cn(product.quantity < 0 && 'bg-red-50 dark:bg-red-900/20')}>
                                     <div className="flex items-center w-full p-4">
-                                        <AccordionTrigger className="flex-1 p-0 hover:no-underline">
+                                        <AccordionTrigger className="flex-1 p-0 hover:no-underline text-left">
                                              <span className="font-medium text-lg">{product.name}</span>
                                         </AccordionTrigger>
-                                        <div className="flex items-center gap-4 text-sm text-right ml-auto">
+                                        <div className="flex items-center gap-4 text-sm text-right ml-auto pl-4">
                                             <span className="text-muted-foreground">
                                                 Saldo: <span className={cn('font-bold', product.balance >= 0 ? 'text-green-600' : 'text-red-600')}>{formatCurrency(product.balance)}</span>
                                             </span>
                                             <span className="text-muted-foreground">
                                                 Quantidade: <span className={cn('font-bold', product.quantity > 0 ? 'text-green-600' : 'text-red-600')}>{product.quantity}</span>
                                             </span>
-                                        </div>
-                                        <div className="pl-4" onClick={(e) => e.stopPropagation()}>
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button variant="ghost" className="h-8 w-8 p-0">
-                                                        <span className="sr-only">Abrir menu</span>
-                                                        <MoreVertical className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditDialog(product); }}>
-                                                        <Edit className="mr-2 h-4 w-4" />
-                                                        <span>Editar</span>
-                                                    </DropdownMenuItem>
-                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openDeleteDialog(product); }} className="text-destructive focus:text-destructive">
-                                                        <Trash2 className="mr-2 h-4 w-4" />
-                                                        <span>Excluir</span>
-                                                    </DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
+                                            <div onClick={(e) => e.stopPropagation()}>
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="ghost" className="h-8 w-8 p-0">
+                                                            <span className="sr-only">Abrir menu</span>
+                                                            <MoreVertical className="h-4 w-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditDialog(product); }}>
+                                                            <Edit className="mr-2 h-4 w-4" />
+                                                            <span>Editar</span>
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openDeleteDialog(product); }} className="text-destructive focus:text-destructive">
+                                                            <Trash2 className="mr-2 h-4 w-4" />
+                                                            <span>Excluir</span>
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </div>
                                         </div>
                                     </div>
                                     <AccordionContent>

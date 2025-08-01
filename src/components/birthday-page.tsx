@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Gift, PlusCircle, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { isToday, isFuture, differenceInDays, parse, isValid } from 'date-fns';
+import { isToday, isFuture, differenceInDays, parse, isValid, getMonth } from 'date-fns';
 import { AddRelativeDialog, type AddRelativeFormValues } from '@/components/add-relative-dialog';
 import { Button } from './ui/button';
 
@@ -146,7 +146,7 @@ export function BirthdayPage() {
                 } else if (isFuture(nextBirthday)) {
                     if (diffDays <= 7) {
                         status = 'week';
-                    } else if (birthMonth === currentMonth) {
+                    } else if (getMonth(nextBirthday) === currentMonth) {
                         status = 'month';
                     }
                 }
@@ -164,12 +164,18 @@ export function BirthdayPage() {
         return null; // Or a loading spinner
     }
 
-    const getDaysUntilText = (days: number, nextBirthday: Date) => {
-        if (isToday(nextBirthday)) {
+    const getDaysUntilText = (days: number, status: string, nextBirthday: Date) => {
+        if (status === 'today') {
             return "Hoje é o dia!";
         }
-        if (days === 1) {
-            return "Falta 1 dia";
+        if (status === 'week') {
+            if (days === 1) {
+                return "Falta 1 dia";
+            }
+            return `Faltam ${days} dias`;
+        }
+        if (status === 'month') {
+            return "Aniversário este mês";
         }
         return `Faltam ${days} dias`;
     }
@@ -220,7 +226,7 @@ export function BirthdayPage() {
                                             'text-green-600': person.status === 'today',
                                         })} />
                                         <span>
-                                            {getDaysUntilText(person.daysUntilBirthday, person.nextBirthday)}
+                                            {getDaysUntilText(person.daysUntilBirthday, person.status, person.nextBirthday)}
                                         </span>
                                     </div>
                                 )}

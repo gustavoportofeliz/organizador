@@ -85,12 +85,16 @@ export function InventoryPage() {
     
         const existingProductIndex = products.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
         const existingProduct = products[existingProductIndex];
-    
+
         if (type === 'sale' && isNewProduct) {
             toast({ variant: 'destructive', title: 'Erro!', description: 'Não é possível vender um produto que não existe no estoque.' });
             return;
         }
-        
+
+        if (type === 'sale' && !isNewProduct && existingProduct.quantity < quantity) {
+             // Does not block sale, just warns
+        }
+    
         const newHistoryEntry: ProductHistoryEntry = {
             id: crypto.randomUUID(),
             date: new Date().toISOString(),

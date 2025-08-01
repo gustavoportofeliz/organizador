@@ -2,7 +2,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Users, Calendar, Archive, DollarSign, PanelLeft, Home } from 'lucide-react';
+import { Users, Calendar, Archive, DollarSign, PanelLeft, Home, HelpCircle } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -44,6 +44,10 @@ export function MainLayout({
                   <DollarSign />
                   <span>Faturamento</span>
                </Link>
+                <Link href="/ajuda" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+                  <HelpCircle />
+                  <span>Ajuda</span>
+                </Link>
           </nav>
 
           {/* Mobile Navigation */}
@@ -79,6 +83,10 @@ export function MainLayout({
                 <Link href="/faturamento" className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
                     <DollarSign className="h-5 w-5" />
                     Faturamento
+                </Link>
+                <Link href="/ajuda" className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
+                    <HelpCircle className="h-5 w-5" />
+                    Ajuda
                 </Link>
               </nav>
             </SheetContent>

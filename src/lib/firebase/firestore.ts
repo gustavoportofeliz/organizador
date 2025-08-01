@@ -92,85 +92,111 @@ export const getClient = async (id: string): Promise<Client> => {
 };
 
 export const addClient = async (data: AddClientFormValues) => {
-  const clientRef = doc(clientsCollection());
-  try {
-    await runTransaction(db, async (transaction) => {
-      
-      const clientId = clientRef.id;
+  await runTransaction(db, async (transaction) => {
+    const clientRef = doc(clientsCollection());
+    const clientId = clientRef.id;
 
-      transaction.set(clientRef, {
-        id: clientId,
-        name: data.name,
-        phone: data.phone || '',
-        birthDate: data.birthDate || '',
-        address: data.address || '',
-        neighborhood: data.neighborhood || '',
-        childrenInfo: data.childrenInfo || '',
-        preferences: data.preferences || '',
-      });
-
-      // Handle purchase and payment logic only if a purchase is made
-      if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
-        const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
-        const purchaseRef = doc(collection(db, purchasePath));
-        const purchaseId = purchaseRef.id;
-        const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
-        const installmentValue = data.purchaseValue / installmentsCount;
-        const intervalDays = data.installmentInterval || 30;
-
-        const newPurchase: Omit<Purchase, 'id'> = {
-          clientId: clientId,
-          item: data.purchaseItem,
-          totalValue: data.purchaseValue,
-          date: new Date().toISOString(),
-          paymentMethod: data.paymentMethod,
-          installments: Array.from({ length: installmentsCount }, (_, i) => ({
-            id: crypto.randomUUID(),
-            installmentNumber: i + 1,
-            value: installmentValue,
-            dueDate: addDays(new Date(), i * intervalDays).toISOString(),
-            status: 'pending',
-          })),
-        };
-
-        // If there is an initial payment, apply it to the installments
-        if (data.paymentAmount && data.paymentAmount > 0) {
-          let remainingPayment = data.paymentAmount;
-          
-          const paymentPath = `${getScopedPath()}/clients/${clientId}/payments`;
-          const paymentRef = doc(collection(db, paymentPath));
-          transaction.set(paymentRef, {
-            id: paymentRef.id,
-            clientId: clientId,
-            amount: data.paymentAmount,
-            date: new Date().toISOString(),
-            purchaseId: purchaseId,
-            paymentMethod: data.paymentMethod,
-          });
-
-          // Iterate over installments and mark as paid
-          for (const installment of newPurchase.installments) {
-            if (remainingPayment <= 0) break;
-            if (installment.status === 'pending' && remainingPayment >= installment.value) {
-              remainingPayment -= installment.value;
-              installment.status = 'paid';
-              installment.paidDate = new Date().toISOString();
-              installment.paymentMethod = data.paymentMethod;
-            }
-          }
-        }
-        transaction.set(purchaseRef, { ...newPurchase, id: purchaseId });
-
-        // Update product stock after purchase
-        await updateProductStock(data.purchaseItem, 1, data.name, data.purchaseValue, clientId, transaction);
-      }
+    // 1. Create the client document
+    transaction.set(clientRef, {
+      id: clientId,
+      name: data.name,
+      phone: data.phone || '',
+      birthDate: data.birthDate || '',
+      address: data.address || '',
+      neighborhood: data.neighborhood || '',
+      childrenInfo: data.childrenInfo || '',
+      preferences: data.preferences || '',
     });
 
-  } catch (e) {
-      console.error("Transaction failed: ", e);
-      throw e;
-  }
+    // 2. Handle purchase and payment logic only if a purchase is made
+    if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
+      const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
+      const purchaseRef = doc(collection(db, purchasePath));
+      const purchaseId = purchaseRef.id;
+      
+      const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
+      const installmentValue = parseFloat((data.purchaseValue / installmentsCount).toFixed(2));
+      const intervalDays = data.installmentInterval || 30;
+
+      const installments: Installment[] = Array.from({ length: installmentsCount }, (_, i) => ({
+        id: crypto.randomUUID(),
+        installmentNumber: i + 1,
+        value: installmentValue,
+        dueDate: addDays(new Date(), i * intervalDays).toISOString(),
+        status: 'pending',
+      }));
+
+      // If there is an initial payment, apply it to the installments
+      if (data.paymentAmount && data.paymentAmount > 0) {
+        let remainingPayment = data.paymentAmount;
+        
+        // Record the single payment transaction
+        const paymentPath = `${getScopedPath()}/clients/${clientId}/payments`;
+        const paymentRef = doc(collection(db, paymentPath));
+        transaction.set(paymentRef, {
+          id: paymentRef.id,
+          clientId: clientId,
+          amount: data.paymentAmount,
+          date: new Date().toISOString(),
+          purchaseId: purchaseId,
+          paymentMethod: data.paymentMethod,
+        });
+
+        // Iterate over installments and mark as paid
+        for (const installment of installments) {
+          if (remainingPayment >= installment.value) {
+            remainingPayment -= installment.value;
+            installment.status = 'paid';
+            installment.paidDate = new Date().toISOString();
+            installment.paymentMethod = data.paymentMethod;
+          } else {
+            // Partial payment logic could be added here if needed in the future
+            break; 
+          }
+        }
+      }
+
+      const newPurchase: Omit<Purchase, 'id'> = {
+        clientId: clientId,
+        item: data.purchaseItem,
+        totalValue: data.purchaseValue,
+        date: new Date().toISOString(),
+        paymentMethod: data.paymentMethod,
+        installments: installments,
+      };
+
+      transaction.set(purchaseRef, { ...newPurchase, id: purchaseId });
+
+      // Update product stock after purchase
+      const clientName = data.name;
+      const productsQuery = query(productsCollection(), where("name", "==", data.purchaseItem));
+      const productSnapshot = await getDocs(productsQuery); // This read must be outside the transaction write operations
+      
+      if (!productSnapshot.empty) {
+        const productDoc = productSnapshot.docs[0];
+        const productData = productDoc.data();
+        const productRefToUpdate = doc(productsCollection(), productDoc.id);
+
+        const newQuantity = (productData.quantity || 0) - 1;
+        transaction.update(productRefToUpdate, { quantity: newQuantity });
+        
+        const historyPath = `${getScopedPath()}/products/${productRefToUpdate.id}/history`;
+        const historyRef = doc(collection(db, historyPath));
+        const newHistoryEntry: Omit<ProductHistoryEntry, 'id'> = {
+            date: new Date().toISOString(),
+            type: 'sale',
+            quantity: 1,
+            unitPrice: data.purchaseValue,
+            notes: `Venda para ${clientName}`,
+            clientName,
+            clientId,
+        };
+        transaction.set(historyRef, { ...newHistoryEntry, id: historyRef.id });
+      }
+    }
+  });
 };
+
 
 
 export const editClient = async (id: string, data: EditClientFormValues) => {
@@ -353,7 +379,7 @@ export const addProduct = async (data: AddProductFormValues) => {
 
 export const updateProductStock = async (productName: string, quantitySold: number, clientName: string, unitPrice: number, clientId: string, transaction: any) => {
     const productsQuery = query(productsCollection(), where("name", "==", productName));
-    const productSnapshot = await transaction.get(productsQuery);
+    const productSnapshot = await getDocs(productsQuery);
     
     if (productSnapshot.empty) {
         console.warn(`Produto "${productName}" não encontrado no estoque. Venda registrada sem atualização de estoque.`);
@@ -401,3 +427,5 @@ export const deleteProduct = async (id: string) => {
     batch.delete(productRef);
     await batch.commit();
 };
+
+    

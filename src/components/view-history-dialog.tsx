@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
@@ -173,7 +174,7 @@ export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment
                     <AccordionItem value={purchase.id} key={purchase.id}>
                         <AccordionTrigger>
                             <div className="flex justify-between w-full pr-4">
-                                <span>{formatDate(purchase.date)} - {purchase.item} ({purchase.paymentMethod || 'N/A'})</span>
+                                <span>{formatDate(purchase.date)} - {purchase.item}</span>
                                 <span className="font-semibold">{formatCurrency(purchase.totalValue)}</span>
                             </div>
                         </AccordionTrigger>
@@ -219,3 +220,5 @@ export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment
     </Dialog>
   );
 }
+
+    

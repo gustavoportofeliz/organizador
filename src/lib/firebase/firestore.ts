@@ -76,10 +76,17 @@ export const getClient = async (id: string): Promise<Client> => {
 };
 
 export const addClient = async (data: AddClientFormValues) => {
+    const clientRef = doc(collection(db, 'clients'));
+
+    // This must run before the batch commit to avoid race conditions
+    if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
+        await updateProductStock(data.purchaseItem, 1, data.name, data.purchaseValue, clientRef.id);
+    }
+    
     const batch = writeBatch(db);
 
-    const clientRef = doc(collection(db, 'clients'));
     batch.set(clientRef, {
+        id: clientRef.id,
         name: data.name,
         phone: data.phone || '',
         birthDate: data.birthDate || '',
@@ -109,20 +116,18 @@ export const addClient = async (data: AddClientFormValues) => {
             }))
         };
         
-        // Handle initial payment
         if (data.paymentAmount && data.paymentAmount > 0) {
             let remainingPayment = data.paymentAmount;
             
-            // First, create payments for the paid amount
             const paymentRef = doc(collection(db, `clients/${clientRef.id}/payments`));
              batch.set(paymentRef, {
+                id: paymentRef.id,
                 clientId: clientRef.id,
                 amount: data.paymentAmount,
                 date: new Date().toISOString(),
                 purchaseId: purchaseRef.id,
             });
 
-            // Then, mark installments as paid
             for (const installment of newPurchase.installments) {
                 if (remainingPayment <= 0) break;
                 
@@ -130,21 +135,16 @@ export const addClient = async (data: AddClientFormValues) => {
                     remainingPayment -= installment.value;
                     installment.status = 'paid';
                     installment.paidDate = new Date().toISOString();
-                } else if (installment.status === 'pending' && remainingPayment > 0) {
-                     // This logic for partial payment is complex and maybe should be avoided in initial creation
-                     // For now, we only handle full installment payments.
                 }
             }
         }
         
         batch.set(purchaseRef, { ...newPurchase, id: purchaseRef.id });
-
-        // Update product stock after setting up purchase
-        await updateProductStock(data.purchaseItem, 1, data.name, data.purchaseValue);
     }
     
     await batch.commit();
 };
+
 
 export const editClient = async (id: string, data: EditClientFormValues) => {
   const clientRef = doc(clientsCollection, id);
@@ -159,9 +159,18 @@ export const deleteClient = async (id: string) => {
 };
 
 export const addTransaction = async (clientId: string, data: AddTransactionFormValues) => {
-    const batch = writeBatch(db);
     const clientRef = doc(db, 'clients', clientId);
+    const clientSnap = await getDoc(clientRef);
+    if (!clientSnap.exists()) {
+        throw new Error("Client not found");
+    }
+    const clientName = clientSnap.data()?.name || 'Cliente';
 
+    // Update stock first
+    await updateProductStock(data.item, 1, clientName, data.amount, clientId);
+
+    // Then create the purchase record
+    const batch = writeBatch(db);
     const purchaseRef = doc(collection(db, `clients/${clientId}/purchases`));
     const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
     const installmentValue = data.amount / installmentsCount;
@@ -182,12 +191,9 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
     };
     batch.set(purchaseRef, { ...newPurchase, id: purchaseRef.id });
     
-    const clientSnap = await getDoc(clientRef);
-    const clientName = clientSnap.data()?.name || 'Cliente';
-
     await batch.commit();
-    await updateProductStock(data.item, 1, clientName, data.amount);
 };
+
 
 export const payInstallment = async (clientId: string, purchaseId: string, installmentId: string) => {
     const purchaseRef = doc(db, `clients/${clientId}/purchases`, purchaseId);
@@ -213,6 +219,7 @@ export const payInstallment = async (clientId: string, purchaseId: string, insta
             transaction.update(purchaseRef, { installments: updatedInstallments });
             const paymentRef = doc(collection(db, `clients/${clientId}/payments`));
             transaction.set(paymentRef, {
+                id: paymentRef.id,
                 clientId,
                 purchaseId,
                 amount: paidAmount,
@@ -263,12 +270,15 @@ export const addProduct = async (data: AddProductFormValues) => {
 
         if (snapshot.empty) {
             if (type === 'sale') {
+                // To prevent selling a product with negative stock, we can just throw an error.
+                // Or allow it and let the stock go negative. Let's throw an error.
                 throw new Error("Cannot sell a product that doesn't exist.");
             }
             productRef = doc(collection(db, 'products'));
             transaction.set(productRef, {
+                id: productRef.id,
                 name,
-                quantity: 0, // Will be updated below
+                quantity: 0, 
                 createdAt: new Date().toISOString()
             });
         } else {
@@ -281,24 +291,26 @@ export const addProduct = async (data: AddProductFormValues) => {
         transaction.update(productRef, { quantity: newQuantity });
         
         const historyRef = doc(collection(db, `products/${productRef.id}/history`));
-        transaction.set(historyRef, {
+        const newHistoryEntry: Omit<ProductHistoryEntry, 'id'> = {
             date: new Date().toISOString(),
             type,
             quantity,
             unitPrice,
             notes: type === 'purchase' ? 'Compra de estoque' : 'Venda manual',
-        });
+        };
+        transaction.set(historyRef, { ...newHistoryEntry, id: historyRef.id });
     });
 };
 
-export const updateProductStock = async (productName: string, quantitySold: number, clientName: string, unitPrice: number) => {
+
+export const updateProductStock = async (productName: string, quantitySold: number, clientName: string, unitPrice: number, clientId: string) => {
     await runTransaction(db, async (transaction) => {
         const q = query(productsCollection, where("name", "==", productName));
         const productSnapshot = await getDocs(q);
         
         if (productSnapshot.empty) {
             console.warn(`Produto "${productName}" não encontrado no estoque. Venda registrada sem atualização de estoque.`);
-            return; // Exit gracefully if product doesn't exist.
+            return;
         }
         
         const productDoc = productSnapshot.docs[0];
@@ -309,16 +321,19 @@ export const updateProductStock = async (productName: string, quantitySold: numb
         transaction.update(productRef, { quantity: newQuantity });
         
         const historyRef = doc(collection(db, `products/${productRef.id}/history`));
-        transaction.set(historyRef, {
+        const newHistoryEntry: Omit<ProductHistoryEntry, 'id'> = {
             date: new Date().toISOString(),
             type: 'sale',
             quantity: quantitySold,
             unitPrice,
             notes: `Venda para ${clientName}`,
-            clientName
-        });
+            clientName,
+            clientId,
+        };
+        transaction.set(historyRef, { ...newHistoryEntry, id: historyRef.id });
     });
 }
+
 
 export const editProduct = async (id: string, data: EditProductFormValues) => {
     const productRef = doc(productsCollection, id);

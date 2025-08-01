@@ -20,6 +20,7 @@ export type Payment = {
   id: string;
   amount: number;
   date: string;
+  purchaseId: string;
   installmentId?: string;
   clientId: string;
 };
@@ -55,6 +56,7 @@ export type ProductHistoryEntry = {
     unitPrice: number;
     notes?: string;
     clientName?: string;
+    clientId?: string;
 }
 
 export type Product = {

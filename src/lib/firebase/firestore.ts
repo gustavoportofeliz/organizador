@@ -170,9 +170,6 @@ export const addClient = async (data: AddClientFormValues) => {
       // Update product stock after purchase
       const clientName = data.name;
       
-      // This part requires an external read which is not allowed inside a transaction directly.
-      // We must perform this read BEFORE the transaction starts if we need the data inside.
-      // For simplicity in this fix, we assume we can query inside. If this fails, this logic needs restructuring.
       const productsQuery = query(productsCollection(), where("name", "==", data.purchaseItem));
       const productSnapshot = await getDocs(productsQuery);
       
@@ -431,5 +428,3 @@ export const deleteProduct = async (id: string) => {
     batch.delete(productRef);
     await batch.commit();
 };
-
-    

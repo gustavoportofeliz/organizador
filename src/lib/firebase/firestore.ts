@@ -312,11 +312,11 @@ export const addProduct = async (data: AddProductFormValues) => {
     
     await runTransaction(db, async (transaction) => {
         const q = query(productsCollection(), where("name", "==", name));
-        const snapshot = await getDocs(q);
+        const querySnapshot = await getDocs(q); // Use getDocs within transaction for reads
         let productRef;
         let currentQuantity = 0;
 
-        if (snapshot.empty) {
+        if (querySnapshot.empty) {
             if (type === 'sale') {
                 throw new Error("Cannot sell a product that doesn't exist.");
             }
@@ -328,8 +328,9 @@ export const addProduct = async (data: AddProductFormValues) => {
                 createdAt: new Date().toISOString()
             });
         } else {
-            productRef = snapshot.docs[0].ref;
-            currentQuantity = snapshot.docs[0].data().quantity || 0;
+            productRef = querySnapshot.docs[0].ref;
+            const productData = querySnapshot.docs[0].data();
+            currentQuantity = productData.quantity || 0;
         }
 
         const newQuantity = type === 'purchase' ? currentQuantity + quantity : currentQuantity - quantity;
@@ -351,10 +352,9 @@ export const addProduct = async (data: AddProductFormValues) => {
 
 
 export const updateProductStock = async (productName: string, quantitySold: number, clientName: string, unitPrice: number, clientId: string, transaction: any) => {
-    const q = query(productsCollection(), where("name", "==", productName));
-    // Important: When calling this inside a transaction, we need to use the transaction object to get documents.
-    const productSnapshot = await transaction.get(q);
-
+    const productsQuery = query(productsCollection(), where("name", "==", productName));
+    const productSnapshot = await transaction.get(productsQuery);
+    
     if (productSnapshot.empty) {
         console.warn(`Produto "${productName}" não encontrado no estoque. Venda registrada sem atualização de estoque.`);
         return;
@@ -401,4 +401,3 @@ export const deleteProduct = async (id: string) => {
     batch.delete(productRef);
     await batch.commit();
 };
-

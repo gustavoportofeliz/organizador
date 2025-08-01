@@ -65,7 +65,7 @@ const getClientTotals = (client: Client) => {
     const totalPayments = client.payments.reduce((sum, p) => sum + p.amount, 0);
     const balance = totalPurchases - totalPayments;
     return { totalPurchases, totalPayments, balance };
-}
+};
 
 export function ClientPage() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -107,7 +107,8 @@ export function ClientPage() {
     setIsLoading(true);
     try {
       const [clientsData, productsData] = await Promise.all([getClients(), getProducts()]);
-      setClients(updateInstallmentStatuses(clientsData));
+      const updatedClients = updateInstallmentStatuses(clientsData);
+      setClients(updatedClients);
       setProducts(productsData);
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -128,7 +129,12 @@ export function ClientPage() {
 
   const totalOutstandingBalance = useMemo(() => {
     return clients.reduce((total, client) => {
-      return total + getClientTotals(client).balance;
+      const clientBalance = client.purchases.reduce((sum, purchase) => {
+        const unpaidInstallments = purchase.installments.filter(i => i.status !== 'paid');
+        const purchaseBalance = unpaidInstallments.reduce((installmentSum, installment) => installmentSum + installment.value, 0);
+        return sum + purchaseBalance;
+      }, 0);
+      return total + clientBalance;
     }, 0);
   }, [clients]);
 

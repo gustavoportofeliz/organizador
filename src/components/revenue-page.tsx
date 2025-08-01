@@ -25,7 +25,8 @@ const formatCurrency = (amount: number) => {
 const getMonthYear = (dateString?: string) => {
     if(!dateString) return 'Data inválida';
     const date = new Date(dateString);
-    return date.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+    const adjustedDate = new Date(date.valueOf() + date.getTimezoneOffset() * 60 * 1000);
+    return adjustedDate.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
 }
 
 export function RevenuePage() {
@@ -98,8 +99,12 @@ export function RevenuePage() {
             .sort(([a], [b]) => {
                 const [monthA, yearA] = a.split(' de ');
                 const [monthB, yearB] = b.split(' de ');
-                return new Date(parseInt(yearA), getMonthIndex(monthA)).getTime() - new Date(parseInt(yearB), getMonthIndex(monthB)).getTime();
-            });
+                const dateA = new Date(parseInt(yearA), getMonthIndex(monthA));
+                const dateB = new Date(parseInt(yearB), getMonthIndex(monthB));
+                if (dateA > dateB) return 1;
+                if (dateA < dateB) return -1;
+                return 0;
+            }).reverse(); // Show most recent months first
 
     }, [clients]);
 

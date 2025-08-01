@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -26,7 +27,8 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { Product } from '@/lib/types';
-import React, { useEffect } from 'react';
+import React from 'react';
+import { ScrollArea } from './ui/scroll-area';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Nome deve ter pelo menos 2 caracteres.' }),
@@ -89,7 +91,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
       }
       onOpenChange(isOpen);
     }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Adicionar Novo Cliente</DialogTitle>
           <DialogDescription>
@@ -97,210 +99,214 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 max-h-[70vh] overflow-y-auto pr-4">
-            <FormField
-              control={control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nome do Cliente</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ex: João da Silva" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-             <FormField
-              control={control}
-              name="phone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Telefone</FormLabel>
-                  <FormControl>
-                    <Input placeholder="(00) 00000-0000" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={control}
-              name="birthDate"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Data de Nascimento</FormLabel>
-                  <FormControl>
-                    <Input type="text" placeholder="DD/MM/AAAA" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={control}
-              name="address"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Endereço</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Rua, Número, Complemento" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={control}
-              name="neighborhood"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Bairro</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ex: Centro" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={control}
-              name="childrenInfo"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Filhos (quantidade)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ex: 2" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={control}
-              name="preferences"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Gostos / Preferências (Produto)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ex: Camiseta Estampada" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={control}
-              name="purchaseItem"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Item da Compra (Opcional)</FormLabel>
-                   <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Selecione um produto do estoque" />
-                            </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                            {products.map((product) => (
-                                <SelectItem key={product.id} value={product.name}>
-                                    {product.name} (Estoque: {product.quantity})
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={control}
-              name="purchaseValue"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Valor da Compra (R$)</FormLabel>
-                  <FormControl>
-                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="flex items-center space-x-2">
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+            <ScrollArea className="h-[60vh] sm:h-auto sm:max-h-[70vh] pr-6">
+              <div className="space-y-4">
                 <FormField
-                    control={control}
-                    name="splitPurchase"
-                    render={({ field }) => (
-                        <FormItem>
-                             <FormControl>
-                                <Switch
-                                    id="split-purchase"
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                />
-                            </FormControl>
-                        </FormItem>
-                    )}
+                  control={control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nome do Cliente</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ex: João da Silva" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-                <Label htmlFor="split-purchase">Dividir compra em parcelas</Label>
-            </div>
-
-            {splitPurchase && (
-                <div className="grid grid-cols-2 gap-4">
                  <FormField
-                    control={control}
-                    name="installments"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Número de Parcelas</FormLabel>
-                        <Select onValueChange={(value) => field.onChange(parseInt(value))} defaultValue={String(field.value)}>
+                  control={control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Telefone</FormLabel>
+                      <FormControl>
+                        <Input placeholder="(00) 00000-0000" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={control}
+                  name="birthDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Data de Nascimento</FormLabel>
+                      <FormControl>
+                        <Input type="text" placeholder="DD/MM/AAAA" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={control}
+                  name="address"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Endereço</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Rua, Número, Complemento" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={control}
+                  name="neighborhood"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Bairro</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ex: Centro" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={control}
+                  name="childrenInfo"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Filhos (quantidade)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ex: 2" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={control}
+                  name="preferences"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Gostos / Preferências (Produto)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ex: Camiseta Estampada" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={control}
+                  name="purchaseItem"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Item da Compra (Opcional)</FormLabel>
+                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Selecione o número de parcelas" />
+                                    <SelectValue placeholder="Selecione um produto do estoque" />
                                 </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                                {[...Array(6)].map((_, i) => (
-                                    <SelectItem key={i + 1} value={String(i + 1)}>{i + 1}x</SelectItem>
+                                {products.map((product) => (
+                                    <SelectItem key={product.id} value={product.name}>
+                                        {product.name} (Estoque: {product.quantity})
+                                    </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={control}
-                    name="installmentInterval"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Intervalo (dias)</FormLabel>
-                        <FormControl>
-                          <Input type="number" step="1" placeholder="30" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={control}
+                  name="purchaseValue"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Valor da Compra (R$)</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+    
+                <div className="flex items-center space-x-2">
+                    <FormField
+                        control={control}
+                        name="splitPurchase"
+                        render={({ field }) => (
+                            <FormItem>
+                                 <FormControl>
+                                    <Switch
+                                        id="split-purchase"
+                                        checked={field.value}
+                                        onCheckedChange={field.onChange}
+                                    />
+                                </FormControl>
+                            </FormItem>
+                        )}
+                    />
+                    <Label htmlFor="split-purchase">Dividir compra em parcelas</Label>
                 </div>
-            )}
-
-            <FormField
-              control={control}
-              name="paymentAmount"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Valor do Pagamento Inicial (R$)</FormLabel>
-                  <FormControl>
-                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <DialogFooter className="pt-4">
-              <Button type="submit" className="bg-accent hover:bg-accent/90 text-accent-foreground">
+    
+                {splitPurchase && (
+                    <div className="grid grid-cols-2 gap-4">
+                     <FormField
+                        control={control}
+                        name="installments"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Número de Parcelas</FormLabel>
+                            <Select onValueChange={(value) => field.onChange(parseInt(value))} defaultValue={String(field.value)}>
+                                <FormControl>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Selecione o número de parcelas" />
+                                    </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                    {[...Array(6)].map((_, i) => (
+                                        <SelectItem key={i + 1} value={String(i + 1)}>{i + 1}x</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={control}
+                        name="installmentInterval"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Intervalo (dias)</FormLabel>
+                            <FormControl>
+                              <Input type="number" step="1" placeholder="30" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                )}
+    
+                <FormField
+                  control={control}
+                  name="paymentAmount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Valor do Pagamento Inicial (R$)</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </ScrollArea>
+            <DialogFooter className="pt-4 mt-4 border-t">
+              <Button type="submit" className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Adicionar Cliente
               </Button>

@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import type { Product } from '@/lib/types';
@@ -162,7 +163,7 @@ export function InventoryPage() {
 
     if (isLoading) {
         return (
-          <div className="flex justify-center items-center min-h-screen">
+          <div className="flex justify-center items-center h-[calc(100vh-8rem)]">
             <Loader2 className="h-16 w-16 animate-spin" />
           </div>
         );
@@ -171,8 +172,8 @@ export function InventoryPage() {
     return (
         <div className="font-body bg-background min-h-screen">
             <header className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4">
-                <h1 className="text-4xl font-headline font-bold text-foreground">Controle de Estoque</h1>
-                <Button onClick={() => setAddProductOpen(true)} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-transform hover:scale-105">
+                <h1 className="text-3xl sm:text-4xl font-headline font-bold text-foreground">Controle de Estoque</h1>
+                <Button onClick={() => setAddProductOpen(true)} size="lg" className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-transform hover:scale-105">
                 <PlusCircle className="mr-2 h-5 w-5" />
                 Movimentar Produto
                 </Button>
@@ -215,80 +216,88 @@ export function InventoryPage() {
                     />
                     </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-2 sm:px-6">
                     <div className="overflow-x-auto">
                         <Accordion type="multiple" className="w-full">
                             {filteredProducts.map(product => (
                                 <AccordionItem value={product.id} key={product.id} className={cn(product.quantity < 0 && 'bg-red-50 dark:bg-red-900/20')}>
-                                    <div className="flex items-center w-full p-4">
+                                    <div className="flex items-center w-full p-2 sm:p-4">
                                         <AccordionTrigger className="flex-1 p-0 hover:no-underline text-left justify-start">
-                                            <span className="font-medium text-lg">{product.name}</span>
+                                            <div className="flex flex-col">
+                                                <span className="font-medium text-base sm:text-lg">{product.name}</span>
+                                                <div className="flex sm:hidden text-xs text-muted-foreground gap-x-2 mt-1">
+                                                    <span>Saldo: <span className={cn('font-bold', product.balance >= 0 ? 'text-green-600' : 'text-red-600')}>{formatCurrency(product.balance)}</span></span>
+                                                    <span>Qtd: <span className={cn('font-bold', product.quantity > 0 ? 'text-green-600' : 'text-red-600')}>{product.quantity}</span></span>
+                                                </div>
+                                            </div>
                                         </AccordionTrigger>
-                                        <div className="flex items-center gap-4 text-sm text-right ml-auto pl-4">
+                                        <div className="hidden sm:flex items-center gap-4 text-sm text-right ml-auto pl-4">
                                             <span className="text-muted-foreground">
                                                 Saldo: <span className={cn('font-bold', product.balance >= 0 ? 'text-green-600' : 'text-red-600')}>{formatCurrency(product.balance)}</span>
                                             </span>
                                             <span className="text-muted-foreground">
                                                 Quantidade: <span className={cn('font-bold', product.quantity > 0 ? 'text-green-600' : 'text-red-600')}>{product.quantity}</span>
                                             </span>
-                                            <div onClick={(e) => e.stopPropagation()}>
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" className="h-8 w-8 p-0">
-                                                            <span className="sr-only">Abrir menu</span>
-                                                            <MoreVertical className="h-4 w-4" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditDialog(product); }}>
-                                                            <Edit className="mr-2 h-4 w-4" />
-                                                            <span>Editar</span>
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openDeleteDialog(product); }} className="text-destructive focus:text-destructive">
-                                                            <Trash2 className="mr-2 h-4 w-4" />
-                                                            <span>Excluir</span>
-                                                        </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </div>
+                                        </div>
+                                        <div onClick={(e) => e.stopPropagation()} className="ml-2">
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="ghost" className="h-8 w-8 p-0">
+                                                        <span className="sr-only">Abrir menu</span>
+                                                        <MoreVertical className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditDialog(product); }}>
+                                                        <Edit className="mr-2 h-4 w-4" />
+                                                        <span>Editar</span>
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openDeleteDialog(product); }} className="text-destructive focus:text-destructive">
+                                                        <Trash2 className="mr-2 h-4 w-4" />
+                                                        <span>Excluir</span>
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </div>
                                     </div>
                                     <AccordionContent>
                                         <h4 className="font-semibold mb-2 px-4">Histórico de Movimentação</h4>
-                                        <Table>
-                                             <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Data</TableHead>
-                                                    <TableHead>Tipo</TableHead>
-                                                    <TableHead>Cliente</TableHead>
-                                                    <TableHead>Quantidade</TableHead>
-                                                    <TableHead className="text-right">Valor Unitário</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {product.history.length === 0 ? (
+                                        <div className="overflow-x-auto">
+                                            <Table>
+                                                <TableHeader>
                                                     <TableRow>
-                                                        <TableCell colSpan={5} className="text-center text-muted-foreground">
-                                                            Nenhuma movimentação registrada.
-                                                        </TableCell>
+                                                        <TableHead>Data</TableHead>
+                                                        <TableHead>Tipo</TableHead>
+                                                        <TableHead className="hidden sm:table-cell">Cliente</TableHead>
+                                                        <TableHead>Qtd</TableHead>
+                                                        <TableHead className="text-right">Valor</TableHead>
                                                     </TableRow>
-                                                ) : (
-                                                    product.history.map(entry => (
-                                                    <TableRow key={entry.id}>
-                                                        <TableCell>{formatDate(entry.date)}</TableCell>
-                                                        <TableCell>
-                                                            <span className={`capitalize font-semibold ${entry.type === 'purchase' ? 'text-green-600' : 'text-red-600'}`}>
-                                                                {entry.type === 'purchase' ? 'Compra' : 'Venda'}
-                                                            </span>
-                                                        </TableCell>
-                                                        <TableCell>{entry.clientName || '-'}</TableCell>
-                                                        <TableCell>{entry.quantity}</TableCell>
-                                                        <TableCell className="text-right">{formatCurrency(entry.unitPrice)}</TableCell>
-                                                    </TableRow>
-                                                    ))
-                                                )}
-                                            </TableBody>
-                                        </Table>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {product.history.length === 0 ? (
+                                                        <TableRow>
+                                                            <TableCell colSpan={5} className="text-center text-muted-foreground">
+                                                                Nenhuma movimentação registrada.
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ) : (
+                                                        product.history.map(entry => (
+                                                        <TableRow key={entry.id}>
+                                                            <TableCell className="text-xs">{formatDate(entry.date)}</TableCell>
+                                                            <TableCell>
+                                                                <span className={`capitalize font-semibold ${entry.type === 'purchase' ? 'text-green-600' : 'text-red-600'}`}>
+                                                                    {entry.type === 'purchase' ? 'Compra' : 'Venda'}
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell className="hidden sm:table-cell">{entry.clientName || '-'}</TableCell>
+                                                            <TableCell>{entry.quantity}</TableCell>
+                                                            <TableCell className="text-right">{formatCurrency(entry.unitPrice)}</TableCell>
+                                                        </TableRow>
+                                                        ))
+                                                    )}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
                                     </AccordionContent>
                                 </AccordionItem>
                             ))}

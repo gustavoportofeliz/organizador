@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -253,7 +254,7 @@ export function ClientPage() {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
+      <div className="flex justify-center items-center h-[calc(100vh-8rem)]">
         <Loader2 className="h-16 w-16 animate-spin" />
       </div>
     );
@@ -262,8 +263,8 @@ export function ClientPage() {
   return (
     <div className="font-body bg-background min-h-screen">
       <header className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4">
-        <h1 className="text-4xl font-headline font-bold text-foreground">Visão Geral dos Clientes</h1>
-        <Button onClick={() => setAddClientOpen(true)} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-transform hover:scale-105">
+        <h1 className="text-3xl sm:text-4xl font-headline font-bold text-foreground">Visão Geral dos Clientes</h1>
+        <Button onClick={() => setAddClientOpen(true)} size="lg" className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-transform hover:scale-105">
           <PlusCircle className="mr-2 h-5 w-5" />
           Adicionar Novo Cliente
         </Button>
@@ -310,10 +311,10 @@ export function ClientPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="font-bold">Nome do Cliente</TableHead>
-                  <TableHead className="text-right font-bold">Total Comprado</TableHead>
-                  <TableHead className="text-right font-bold">Total Pago</TableHead>
-                  <TableHead className="text-right font-bold">Saldo Pendente</TableHead>
+                  <TableHead className="font-bold">Nome</TableHead>
+                  <TableHead className="text-right font-bold hidden sm:table-cell">Comprado</TableHead>
+                  <TableHead className="text-right font-bold hidden md:table-cell">Pago</TableHead>
+                  <TableHead className="text-right font-bold">Saldo</TableHead>
                   <TableHead className="text-center font-bold">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -323,8 +324,8 @@ export function ClientPage() {
                   return (
                     <TableRow key={client.id} className="hover:bg-secondary/50 transition-colors duration-300">
                       <TableCell className="font-medium">{client.name}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(totalPurchases)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(totalPayments)}</TableCell>
+                      <TableCell className="text-right hidden sm:table-cell">{formatCurrency(totalPurchases)}</TableCell>
+                      <TableCell className="text-right hidden md:table-cell">{formatCurrency(totalPayments)}</TableCell>
                       <TableCell className={cn('text-right font-semibold', balance > 0 ? 'text-destructive' : 'text-accent-foreground')}>
                         {formatCurrency(balance)}
                       </TableCell>

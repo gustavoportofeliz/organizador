@@ -1,3 +1,4 @@
+
 'use client';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import type { Client } from '@/lib/types';
@@ -116,7 +117,7 @@ export function RevenuePage() {
 
     if (isLoading) {
         return (
-          <div className="flex justify-center items-center min-h-screen">
+          <div className="flex justify-center items-center h-[calc(100vh-8rem)]">
             <Loader2 className="h-16 w-16 animate-spin" />
           </div>
         );
@@ -125,7 +126,7 @@ export function RevenuePage() {
     return (
         <div className="space-y-8">
             <header>
-                <h1 className="text-4xl font-headline font-bold text-foreground mb-2">Visão de Faturamento</h1>
+                <h1 className="text-3xl sm:text-4xl font-headline font-bold text-foreground mb-2">Visão de Faturamento</h1>
                 <p className="text-muted-foreground">Acompanhe os valores quitados e devidos de cada mês.</p>
             </header>
 
@@ -165,7 +166,7 @@ export function RevenuePage() {
                                             <TableRow>
                                                 <TableHead>Cliente</TableHead>
                                                 <TableHead>Status</TableHead>
-                                                <TableHead className="text-right">Valor da Parcela</TableHead>
+                                                <TableHead className="text-right">Valor</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>

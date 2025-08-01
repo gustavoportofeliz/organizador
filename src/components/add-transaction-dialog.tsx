@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import React from 'react';
+import { ScrollArea } from './ui/scroll-area';
 
 const formSchema = z.object({
   item: z.string().min(1, { message: 'A descrição é obrigatória.' }),
@@ -88,103 +90,107 @@ export function AddTransactionDialog({
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4  max-h-[70vh] overflow-y-auto pr-4">
-            <FormField
-              control={control}
-              name="item"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Descrição da Compra</FormLabel>
-                   <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Selecione um produto do estoque" />
-                            </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                            {products.map((product) => (
-                                <SelectItem key={product.id} value={product.name} disabled={product.quantity === 0}>
-                                    {product.name} (Estoque: {product.quantity})
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-             <FormField
-              control={control}
-              name="amount"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Valor da Compra (R$)</FormLabel>
-                  <FormControl>
-                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="flex items-center space-x-2">
+          <form onSubmit={form.handleSubmit(onSubmit)}>
+            <ScrollArea className="h-[60vh] sm:h-auto sm:max-h-[70vh] pr-6">
+              <div className="space-y-4">
                 <FormField
-                control={control}
-                name="splitPurchase"
-                render={({ field }) => (
+                  control={control}
+                  name="item"
+                  render={({ field }) => (
                     <FormItem>
-                          <FormControl>
-                            <Switch
-                                id="split-purchase-transaction"
-                                checked={field.value}
-                                onCheckedChange={field.onChange}
-                            />
-                        </FormControl>
-                    </FormItem>
-                )}
-              />
-              <Label htmlFor="split-purchase-transaction">Dividir compra em parcelas</Label>
-            </div>
-            {splitPurchase && (
-                <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                    control={control}
-                    name="installments"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Número de Parcelas</FormLabel>
-                        <Select onValueChange={(value) => field.onChange(parseInt(value, 10))} defaultValue={String(field.value)}>
+                      <FormLabel>Descrição da Compra</FormLabel>
+                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Selecione o número de parcelas" />
+                                    <SelectValue placeholder="Selecione um produto do estoque" />
                                 </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                                {[...Array(6)].map((_, i) => (
-                                    <SelectItem key={i + 1} value={String(i + 1)}>{i + 1}x</SelectItem>
+                                {products.map((product) => (
+                                    <SelectItem key={product.id} value={product.name} disabled={product.quantity === 0}>
+                                        {product.name} (Estoque: {product.quantity})
+                                    </SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
-                        <FormMessage />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                 <FormField
+                  control={control}
+                  name="amount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Valor da Compra (R$)</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="flex items-center space-x-2">
+                    <FormField
+                    control={control}
+                    name="splitPurchase"
+                    render={({ field }) => (
+                        <FormItem>
+                              <FormControl>
+                                <Switch
+                                    id="split-purchase-transaction"
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                />
+                            </FormControl>
                         </FormItem>
                     )}
-                    />
-                     <FormField
-                        control={control}
-                        name="installmentInterval"
-                        render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Intervalo (dias)</FormLabel>
-                            <FormControl>
-                            <Input type="number" step="1" placeholder="30" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                        </FormItem>
-                        )}
-                    />
+                  />
+                  <Label htmlFor="split-purchase-transaction">Dividir compra em parcelas</Label>
                 </div>
-            )}
-            <DialogFooter>
-              <Button type="submit" className="bg-accent hover:bg-accent/90 text-accent-foreground">
+                {splitPurchase && (
+                    <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                        control={control}
+                        name="installments"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Número de Parcelas</FormLabel>
+                            <Select onValueChange={(value) => field.onChange(parseInt(value, 10))} defaultValue={String(field.value)}>
+                                <FormControl>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Selecione o número de parcelas" />
+                                    </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                    {[...Array(6)].map((_, i) => (
+                                        <SelectItem key={i + 1} value={String(i + 1)}>{i + 1}x</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                         <FormField
+                            control={control}
+                            name="installmentInterval"
+                            render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Intervalo (dias)</FormLabel>
+                                <FormControl>
+                                <Input type="number" step="1" placeholder="30" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                            )}
+                        />
+                    </div>
+                )}
+              </div>
+            </ScrollArea>
+            <DialogFooter className="pt-4 mt-4 border-t">
+              <Button type="submit" className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
                 Registrar Compra
               </Button>
             </DialogFooter>

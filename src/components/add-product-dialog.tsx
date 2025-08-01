@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -79,7 +80,7 @@ export function AddProductDialog({ open, onOpenChange, onAddProduct, products }:
       }
       onOpenChange(isOpen);
     }}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Movimentar Produto</DialogTitle>
           <DialogDescription>
@@ -132,7 +133,7 @@ export function AddProductDialog({ open, onOpenChange, onAddProduct, products }:
                     <RadioGroup
                       onValueChange={field.onChange}
                       defaultValue={field.value}
-                      className="flex flex-row space-x-4"
+                      className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4"
                     >
                       <FormItem className="flex items-center space-x-2 space-y-0">
                         <FormControl>
@@ -180,7 +181,7 @@ export function AddProductDialog({ open, onOpenChange, onAddProduct, products }:
               )}
             />
             <DialogFooter className="pt-4">
-              <Button type="submit" className="bg-accent hover:bg-accent/90 text-accent-foreground">
+              <Button type="submit" className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Registrar Movimentação
               </Button>

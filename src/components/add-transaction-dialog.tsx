@@ -33,6 +33,7 @@ import { ScrollArea } from './ui/scroll-area';
 const formSchema = z.object({
   item: z.string().min(1, { message: 'A descrição é obrigatória.' }),
   amount: z.coerce.number().min(0.01, { message: 'O valor deve ser maior que zero.' }),
+  paymentMethod: z.enum(['Pix', 'Dinheiro', 'Cartão de Crédito', 'Cartão de Débito'], { required_error: "Forma de pagamento é obrigatória."}),
   splitPurchase: z.boolean().default(false),
   installments: z.coerce.number().min(1).max(6).optional(),
   installmentInterval: z.coerce.number().min(1).optional().default(30),
@@ -126,6 +127,29 @@ export function AddTransactionDialog({
                       <FormControl>
                         <Input type="number" step="0.01" placeholder="0.00" {...field} />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="paymentMethod"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Forma de Pagamento</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione a forma de pagamento" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Pix">Pix</SelectItem>
+                          <SelectItem value="Dinheiro">Dinheiro</SelectItem>
+                          <SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem>
+                          <SelectItem value="Cartão de Débito">Cartão de Débito</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}

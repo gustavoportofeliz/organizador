@@ -40,6 +40,7 @@ const formSchema = z.object({
   purchaseItem: z.string().optional(),
   purchaseValue: z.coerce.number().min(0).optional().default(0),
   paymentAmount: z.coerce.number().min(0).optional().default(0),
+  paymentMethod: z.enum(['Pix', 'Dinheiro', 'Cartão de Crédito', 'Cartão de Débito']).optional(),
   splitPurchase: z.boolean().default(false),
   installments: z.coerce.number().min(1).max(6).optional(),
   installmentInterval: z.coerce.number().min(1).optional().default(30),
@@ -76,6 +77,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
 
   const { watch, control } = form;
   const splitPurchase = watch('splitPurchase');
+  const purchaseValue = watch('purchaseValue');
 
   const onSubmit = (data: AddClientFormValues) => {
     onAddClient(data);
@@ -302,6 +304,32 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
                     </FormItem>
                   )}
                 />
+
+                {(purchaseValue > 0) && (
+                <FormField
+                  control={control}
+                  name="paymentMethod"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Forma de Pagamento</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione a forma de pagamento" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Pix">Pix</SelectItem>
+                          <SelectItem value="Dinheiro">Dinheiro</SelectItem>
+                          <SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem>
+                          <SelectItem value="Cartão de Débito">Cartão de Débito</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                )}
               </div>
             </ScrollArea>
             <DialogFooter className="pt-4 mt-4 border-t">

@@ -21,12 +21,15 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Label } from './ui/label';
 
 interface ViewHistoryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   client: Client | null;
-  onPayInstallment: (clientId: string, purchaseId: string, installmentId: string) => void;
+  onPayInstallment: (clientId: string, purchaseId: string, installmentId: string, paymentMethod: Installment['paymentMethod']) => void;
 }
 
 const formatCurrency = (amount: number) => {
@@ -62,6 +65,51 @@ const getStatusBadge = (status: Installment['status']) => {
     }
 }
 
+function PayInstallmentButton({ onPay }: { onPay: (paymentMethod: Installment['paymentMethod']) => void }) {
+    const [method, setMethod] = useState<Installment['paymentMethod'] | undefined>();
+    const [isOpen, setIsOpen] = useState(false);
+
+    const handlePay = () => {
+        if (method) {
+            onPay(method);
+            setIsOpen(false);
+        }
+    }
+
+    return (
+        <Popover open={isOpen} onOpenChange={setIsOpen}>
+            <PopoverTrigger asChild>
+                <Button size="sm">Quitar</Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-60">
+                <div className="grid gap-4">
+                    <div className="space-y-2">
+                        <h4 className="font-medium leading-none">Quitar Parcela</h4>
+                        <p className="text-sm text-muted-foreground">
+                            Selecione a forma de pagamento para esta parcela.
+                        </p>
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="payment-method">Forma de Pagamento</Label>
+                        <Select onValueChange={(value: Installment['paymentMethod']) => setMethod(value)}>
+                            <SelectTrigger id="payment-method">
+                                <SelectValue placeholder="Selecione..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="Pix">Pix</SelectItem>
+                                <SelectItem value="Dinheiro">Dinheiro</SelectItem>
+                                <SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem>
+                                <SelectItem value="Cartão de Débito">Cartão de Débito</SelectItem>
+                            </SelectContent>
+                        </Select>
+                         <Button onClick={handlePay} disabled={!method} className="mt-2">Confirmar</Button>
+                    </div>
+                </div>
+            </PopoverContent>
+        </Popover>
+    )
+}
+
 export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment }: ViewHistoryDialogProps) {
 
   // Local state to reflect UI changes immediately
@@ -77,7 +125,7 @@ export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment
     return [...internalClient.purchases].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [internalClient]);
 
-  const handlePay = (purchaseId: string, installmentId: string) => {
+  const handlePay = (purchaseId: string, installmentId: string, paymentMethod: Installment['paymentMethod']) => {
     if (client) {
       // Optimistic update
       setInternalClient(prevClient => {
@@ -89,7 +137,7 @@ export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment
                       ...p,
                       installments: p.installments.map(i => {
                           if (i.id === installmentId) {
-                              return { ...i, status: 'paid', paidDate: new Date().toISOString() };
+                              return { ...i, status: 'paid', paidDate: new Date().toISOString(), paymentMethod };
                           }
                           return i;
                       })
@@ -101,7 +149,7 @@ export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment
       });
 
       // Call the actual update function
-      onPayInstallment(client.id, purchaseId, installmentId);
+      onPayInstallment(client.id, purchaseId, installmentId, paymentMethod);
     }
   }
 
@@ -125,7 +173,7 @@ export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment
                     <AccordionItem value={purchase.id} key={purchase.id}>
                         <AccordionTrigger>
                             <div className="flex justify-between w-full pr-4">
-                                <span>{formatDate(purchase.date)} - {purchase.item}</span>
+                                <span>{formatDate(purchase.date)} - {purchase.item} ({purchase.paymentMethod || 'N/A'})</span>
                                 <span className="font-semibold">{formatCurrency(purchase.totalValue)}</span>
                             </div>
                         </AccordionTrigger>
@@ -136,6 +184,7 @@ export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment
                                         <TableHead>Parcela</TableHead>
                                         <TableHead>Vencimento</TableHead>
                                         <TableHead>Status</TableHead>
+                                        <TableHead>Método Pgto.</TableHead>
                                         <TableHead className="text-right">Valor</TableHead>
                                         <TableHead className="text-center">Ação</TableHead>
                                     </TableRow>
@@ -146,14 +195,13 @@ export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment
                                             <TableCell>{inst.installmentNumber} / {purchase.installments.length}</TableCell>
                                             <TableCell>{formatDate(inst.dueDate)}</TableCell>
                                             <TableCell>{getStatusBadge(inst.status)}</TableCell>
+                                            <TableCell>{inst.paymentMethod || '-'}</TableCell>
                                             <TableCell className={cn('text-right font-medium', inst.status === 'overdue' ? 'text-destructive' : '')}>
                                                 {formatCurrency(inst.value)}
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 {inst.status !== 'paid' ? (
-                                                    <Button size="sm" onClick={() => handlePay(purchase.id, inst.id)}>
-                                                        Quitar
-                                                    </Button>
+                                                    <PayInstallmentButton onPay={(method) => handlePay(purchase.id, inst.id, method)} />
                                                 ) : (
                                                     <span className="text-sm font-semibold text-green-600">Quitado</span>
                                                 )}

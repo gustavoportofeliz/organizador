@@ -14,7 +14,7 @@ import {
   where,
   setDoc,
 } from 'firebase/firestore';
-import type { Client, Product, Purchase, Payment, Relative, ProductHistoryEntry } from '../types';
+import type { Client, Product, Purchase, Payment, Relative, ProductHistoryEntry, Installment } from '../types';
 import type { AddClientFormValues } from '@/components/add-client-dialog';
 import type { EditClientFormValues } from '@/components/edit-client-dialog';
 import type { AddTransactionFormValues } from '@/components/add-transaction-dialog';
@@ -118,6 +118,7 @@ export const addClient = async (data: AddClientFormValues) => {
           item: data.purchaseItem,
           totalValue: data.purchaseValue,
           date: new Date().toISOString(),
+          paymentMethod: data.paymentMethod,
           installments: Array.from({ length: installmentsCount }, (_, i) => ({
             id: crypto.randomUUID(),
             installmentNumber: i + 1,
@@ -137,6 +138,7 @@ export const addClient = async (data: AddClientFormValues) => {
             amount: data.paymentAmount,
             date: new Date().toISOString(),
             purchaseId: purchaseId,
+            paymentMethod: data.paymentMethod,
           });
 
           for (const installment of newPurchase.installments) {
@@ -145,6 +147,7 @@ export const addClient = async (data: AddClientFormValues) => {
               remainingPayment -= installment.value;
               installment.status = 'paid';
               installment.paidDate = new Date().toISOString();
+              installment.paymentMethod = data.paymentMethod;
             }
           }
         }
@@ -190,6 +193,7 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
         clientId: clientId,
         item: data.item,
         totalValue: data.amount,
+        paymentMethod: data.paymentMethod,
         date: new Date().toISOString(),
         installments: Array.from({ length: installmentsCount }, (_, i) => ({
             id: crypto.randomUUID(),
@@ -197,6 +201,7 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
             value: installmentValue,
             dueDate: addDays(new Date(), i * intervalDays).toISOString(),
             status: 'pending',
+            paymentMethod: i === 0 ? data.paymentMethod : undefined, // Assign method to first installment if not split
         }))
     };
     batch.set(purchaseRef, { ...newPurchase, id: purchaseRef.id });
@@ -207,7 +212,7 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
 };
 
 
-export const payInstallment = async (clientId: string, purchaseId: string, installmentId: string) => {
+export const payInstallment = async (clientId: string, purchaseId: string, installmentId: string, paymentMethod: Installment['paymentMethod']) => {
     const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
     const purchaseRef = doc(db, purchasePath, purchaseId);
     
@@ -223,7 +228,7 @@ export const payInstallment = async (clientId: string, purchaseId: string, insta
             if (inst.id === installmentId && inst.status !== 'paid') {
                 paidAmount = inst.value;
                 isUpdated = true;
-                return { ...inst, status: 'paid' as 'paid', paidDate: new Date().toISOString() };
+                return { ...inst, status: 'paid' as 'paid', paidDate: new Date().toISOString(), paymentMethod };
             }
             return inst;
         });
@@ -239,6 +244,7 @@ export const payInstallment = async (clientId: string, purchaseId: string, insta
                 amount: paidAmount,
                 date: new Date().toISOString(),
                 installmentId: installmentId,
+                paymentMethod: paymentMethod
             });
         }
     });

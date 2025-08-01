@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import type { Client, Purchase, Product, ProductHistoryEntry, Relative } from '@/lib/types';
+import type { Client, Purchase, Product, ProductHistoryEntry, Relative, Installment } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -195,9 +195,9 @@ export function ClientPage() {
   };
 
   
-  const handlePayInstallment = async (clientId: string, purchaseId: string, installmentId: string) => {
+  const handlePayInstallment = async (clientId: string, purchaseId: string, installmentId: string, paymentMethod: Installment['paymentMethod']) => {
     try {
-      await payInstallmentInDb(clientId, purchaseId, installmentId);
+      await payInstallmentInDb(clientId, purchaseId, installmentId, paymentMethod);
       toast({ title: 'Sucesso!', description: 'Parcela quitada.', className: 'bg-accent text-accent-foreground' });
       fetchAllData();
        if(selectedClient){

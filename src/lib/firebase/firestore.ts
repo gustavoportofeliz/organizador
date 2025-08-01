@@ -76,14 +76,8 @@ export const getClient = async (id: string): Promise<Client> => {
 };
 
 export const addClient = async (data: AddClientFormValues) => {
-    const clientRef = doc(collection(db, 'clients'));
-
-    // This must run before the batch commit to avoid race conditions
-    if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
-        await updateProductStock(data.purchaseItem, 1, data.name, data.purchaseValue, clientRef.id);
-    }
-    
     const batch = writeBatch(db);
+    const clientRef = doc(collection(db, 'clients'));
 
     batch.set(clientRef, {
         id: clientRef.id,
@@ -142,7 +136,13 @@ export const addClient = async (data: AddClientFormValues) => {
         batch.set(purchaseRef, { ...newPurchase, id: purchaseRef.id });
     }
     
+    // First, commit the client and their initial purchase/payment data
     await batch.commit();
+
+    // After the client is created, update the product stock
+    if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
+        await updateProductStock(data.purchaseItem, 1, data.name, data.purchaseValue, clientRef.id);
+    }
 };
 
 
@@ -166,10 +166,7 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
     }
     const clientName = clientSnap.data()?.name || 'Cliente';
 
-    // Update stock first
-    await updateProductStock(data.item, 1, clientName, data.amount, clientId);
-
-    // Then create the purchase record
+    // Create the purchase record first
     const batch = writeBatch(db);
     const purchaseRef = doc(collection(db, `clients/${clientId}/purchases`));
     const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
@@ -192,6 +189,9 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
     batch.set(purchaseRef, { ...newPurchase, id: purchaseRef.id });
     
     await batch.commit();
+
+    // Then update stock
+    await updateProductStock(data.item, 1, clientName, data.amount, clientId);
 };
 
 
@@ -270,8 +270,6 @@ export const addProduct = async (data: AddProductFormValues) => {
 
         if (snapshot.empty) {
             if (type === 'sale') {
-                // To prevent selling a product with negative stock, we can just throw an error.
-                // Or allow it and let the stock go negative. Let's throw an error.
                 throw new Error("Cannot sell a product that doesn't exist.");
             }
             productRef = doc(collection(db, 'products'));

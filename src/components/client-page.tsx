@@ -238,6 +238,7 @@ export function ClientPage() {
   }
   
   const filteredClients = useMemo(() => {
+    if (isLoading) return [];
     return clients.filter(client => {
       const search = searchTerm.toLowerCase();
       return (
@@ -249,16 +250,8 @@ export function ClientPage() {
         (client.preferences && client.preferences.toLowerCase().includes(search))
       );
     });
-  }, [clients, searchTerm]);
+  }, [clients, searchTerm, isLoading]);
 
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-[calc(100vh-8rem)]">
-        <Loader2 className="h-16 w-16 animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="font-body bg-background min-h-screen">
@@ -308,69 +301,75 @@ export function ClientPage() {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="font-bold">Nome</TableHead>
-                  <TableHead className="text-right font-bold hidden sm:table-cell">Comprado</TableHead>
-                  <TableHead className="text-right font-bold hidden md:table-cell">Pago</TableHead>
-                  <TableHead className="text-right font-bold">Saldo</TableHead>
-                  <TableHead className="text-center font-bold">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredClients.length > 0 ? (
-                  filteredClients.map(client => {
-                    const { totalPurchases, totalPayments, balance } = getClientTotals(client);
-                    return (
-                      <TableRow key={client.id} className="hover:bg-secondary/50 transition-colors duration-300">
-                        <TableCell className="font-medium">{client.name}</TableCell>
-                        <TableCell className="text-right hidden sm:table-cell">{formatCurrency(totalPurchases)}</TableCell>
-                        <TableCell className="text-right hidden md:table-cell">{formatCurrency(totalPayments)}</TableCell>
-                        <TableCell className={cn('text-right font-semibold', balance > 0 ? 'text-destructive' : 'text-accent-foreground')}>
-                          {formatCurrency(balance)}
+             {isLoading ? (
+                <div className="flex justify-center items-center h-64">
+                    <Loader2 className="h-16 w-16 animate-spin" />
+                </div>
+             ) : (
+                <Table>
+                <TableHeader>
+                    <TableRow>
+                    <TableHead className="font-bold">Nome</TableHead>
+                    <TableHead className="text-right font-bold hidden sm:table-cell">Comprado</TableHead>
+                    <TableHead className="text-right font-bold hidden md:table-cell">Pago</TableHead>
+                    <TableHead className="text-right font-bold">Saldo</TableHead>
+                    <TableHead className="text-center font-bold">Ações</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {filteredClients.length > 0 ? (
+                    filteredClients.map(client => {
+                        const { totalPurchases, totalPayments, balance } = getClientTotals(client);
+                        return (
+                        <TableRow key={client.id} className="hover:bg-secondary/50 transition-colors duration-300">
+                            <TableCell className="font-medium">{client.name}</TableCell>
+                            <TableCell className="text-right hidden sm:table-cell">{formatCurrency(totalPurchases)}</TableCell>
+                            <TableCell className="text-right hidden md:table-cell">{formatCurrency(totalPayments)}</TableCell>
+                            <TableCell className={cn('text-right font-semibold', balance > 0 ? 'text-destructive' : 'text-accent-foreground')}>
+                            {formatCurrency(balance)}
+                            </TableCell>
+                            <TableCell className="text-center">
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                    <span className="sr-only">Abrir menu</span>
+                                    <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => openTransactionDialog(client)}>
+                                    <Plus className="mr-2 h-4 w-4" />
+                                    <span>Adicionar Compra</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => openHistoryDialog(client)}>
+                                    <History className="mr-2 h-4 w-4" />
+                                    <span>Ver Histórico</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => openEditDialog(client)}>
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    <span>Editar Cliente</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => openDeleteDialog(client)} className="text-destructive focus:text-destructive">
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    <span>Excluir Cliente</span>
+                                </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                            </TableCell>
+                        </TableRow>
+                        );
+                    })
+                    ) : (
+                    <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground h-24">
+                        Nenhum cliente encontrado.
                         </TableCell>
-                        <TableCell className="text-center">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" className="h-8 w-8 p-0">
-                                <span className="sr-only">Abrir menu</span>
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => openTransactionDialog(client)}>
-                                <Plus className="mr-2 h-4 w-4" />
-                                <span>Adicionar Compra</span>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => openHistoryDialog(client)}>
-                                <History className="mr-2 h-4 w-4" />
-                                <span>Ver Histórico</span>
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => openEditDialog(client)}>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  <span>Editar Cliente</span>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => openDeleteDialog(client)} className="text-destructive focus:text-destructive">
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  <span>Excluir Cliente</span>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground h-24">
-                      Nenhum cliente encontrado.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                    </TableRow>
+                    )}
+                </TableBody>
+                </Table>
+             )}
           </div>
         </CardContent>
       </Card>

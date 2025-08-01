@@ -47,7 +47,7 @@ const getClientSubcollections = async (clientId: string) => {
     const [purchasesSnap, paymentsSnap, relativesSnap] = await Promise.all([
         getDocs(purchasesRef),
         getDocs(paymentsRef),
-        getDocs(relativesSnap),
+        getDocs(relativesRef),
     ]);
 
     const purchases: Purchase[] = await Promise.all(purchasesSnap.docs.map(async (pDoc) => {
@@ -88,9 +88,10 @@ export const getClient = async (id: string): Promise<Client> => {
 };
 
 export const addClient = async (data: AddClientFormValues) => {
+  const clientRef = doc(clientsCollection());
   try {
     await runTransaction(db, async (transaction) => {
-      const clientRef = doc(clientsCollection());
+      
       const clientId = clientRef.id;
 
       transaction.set(clientRef, {

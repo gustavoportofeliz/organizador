@@ -53,7 +53,11 @@ const getClientSubcollections = async (clientId: string) => {
     const purchases: Purchase[] = await Promise.all(purchasesSnap.docs.map(async (pDoc) => {
         const purchaseData = { id: pDoc.id, ...pDoc.data() } as Purchase;
         // Ensure installments are sorted
-        purchaseData.installments = purchaseData.installments.sort((a, b) => a.installmentNumber - b.installmentNumber);
+        if (purchaseData.installments) {
+            purchaseData.installments = purchaseData.installments.sort((a, b) => a.installmentNumber - b.installmentNumber);
+        } else {
+            purchaseData.installments = [];
+        }
         return purchaseData;
     }));
 
@@ -172,7 +176,25 @@ export const editClient = async (id: string, data: EditClientFormValues) => {
 
 export const deleteClient = async (id: string) => {
     const clientRef = doc(clientsCollection(), id);
-    await deleteDoc(clientRef);
+    const batch = writeBatch(db);
+
+    const { purchases, payments, relatives } = await getClientSubcollections(id);
+
+    purchases.forEach(p => {
+        const pRef = doc(db, `${getScopedPath()}/clients/${id}/purchases`, p.id);
+        batch.delete(pRef);
+    });
+    payments.forEach(p => {
+        const pRef = doc(db, `${getScopedPath()}/clients/${id}/payments`, p.id);
+        batch.delete(pRef);
+    });
+    relatives.forEach(r => {
+        const rRef = doc(db, `${getScopedPath()}/clients/${id}/relatives`, r.id);
+        batch.delete(rRef);
+    });
+
+    batch.delete(clientRef);
+    await batch.commit();
 };
 
 export const addTransaction = async (clientId: string, data: AddTransactionFormValues) => {
@@ -364,5 +386,15 @@ export const editProduct = async (id: string, data: EditProductFormValues) => {
 
 export const deleteProduct = async (id: string) => {
     const productRef = doc(productsCollection(), id);
-    await deleteDoc(productRef);
+    const batch = writeBatch(db);
+
+    const historyPath = `${getScopedPath()}/products/${id}/history`;
+    const historyRef = collection(db, historyPath);
+    const historySnap = await getDocs(historyRef);
+    historySnap.docs.forEach(historyDoc => {
+        batch.delete(historyDoc.ref);
+    });
+
+    batch.delete(productRef);
+    await batch.commit();
 };

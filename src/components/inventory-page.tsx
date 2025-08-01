@@ -154,11 +154,7 @@ export function InventoryPage() {
         }).filter(product => {
             const search = searchTerm.toLowerCase();
             return product.name.toLowerCase().includes(search);
-        }).sort((a, b) => {
-            if (a.quantity < 0 && b.quantity >= 0) return -1;
-            if (b.quantity < 0 && a.quantity >= 0) return 1;
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        });
+        }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     }, [products, searchTerm]);
 
     if (isLoading) {

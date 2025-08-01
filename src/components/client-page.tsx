@@ -122,13 +122,7 @@ export function ClientPage() {
 
   const totalOutstandingBalance = useMemo(() => {
     return clients.reduce((total, client) => {
-      const clientBalance = client.purchases.reduce((purchaseTotal, purchase) => {
-        const purchaseBalance = purchase.installments
-          .filter(inst => inst.status !== 'paid')
-          .reduce((sum, inst) => sum + inst.value, 0);
-        return purchaseTotal + purchaseBalance;
-      }, 0);
-      return total + clientBalance;
+      return total + getClientTotals(client).balance;
     }, 0);
   }, [clients]);
 

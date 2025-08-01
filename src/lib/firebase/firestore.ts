@@ -12,6 +12,7 @@ import {
   query,
   where,
   documentId,
+  setDoc,
 } from 'firebase/firestore';
 import type { Client, Product, Purchase, Payment, Relative, ProductHistoryEntry } from '../types';
 import type { AddClientFormValues } from '@/components/add-client-dialog';
@@ -38,7 +39,13 @@ const getClientSubcollections = async (clientId: string) => {
         getDocs(relativesRef),
     ]);
 
-    const purchases = purchasesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Purchase));
+    const purchases: Purchase[] = await Promise.all(purchasesSnap.docs.map(async (pDoc) => {
+        const purchaseData = { id: pDoc.id, ...pDoc.data() } as Purchase;
+        // Ensure installments are sorted
+        purchaseData.installments = purchaseData.installments.sort((a, b) => a.installmentNumber - b.installmentNumber);
+        return purchaseData;
+    }));
+
     const payments = paymentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Payment));
     const relatives = relativesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Relative));
 
@@ -88,8 +95,7 @@ export const addClient = async (data: AddClientFormValues) => {
         const installmentValue = data.purchaseValue / installmentsCount;
         const intervalDays = data.installmentInterval || 30;
 
-        const newPurchase = {
-            id: purchaseRef.id,
+        const newPurchase: Omit<Purchase, 'id'> = {
             clientId: clientRef.id,
             item: data.purchaseItem,
             totalValue: data.purchaseValue,
@@ -98,32 +104,43 @@ export const addClient = async (data: AddClientFormValues) => {
                 id: crypto.randomUUID(),
                 installmentNumber: i + 1,
                 value: installmentValue,
-                dueDate: addDays(new Date(), (i + 1) * intervalDays).toISOString(),
+                dueDate: addDays(new Date(), i * intervalDays).toISOString(),
                 status: 'pending',
             }))
         };
-
+        
+        // Handle initial payment
         if (data.paymentAmount && data.paymentAmount > 0) {
             let remainingPayment = data.paymentAmount;
+            
+            // First, create payments for the paid amount
+            const paymentRef = doc(collection(db, `clients/${clientRef.id}/payments`));
+             batch.set(paymentRef, {
+                clientId: clientRef.id,
+                amount: data.paymentAmount,
+                date: new Date().toISOString(),
+                purchaseId: purchaseRef.id,
+            });
+
+            // Then, mark installments as paid
             for (const installment of newPurchase.installments) {
                 if (remainingPayment <= 0) break;
+                
                 if (installment.status === 'pending' && remainingPayment >= installment.value) {
                     remainingPayment -= installment.value;
                     installment.status = 'paid';
                     installment.paidDate = new Date().toISOString();
-                    
-                    const paymentRef = doc(collection(db, `clients/${clientRef.id}/payments`));
-                    batch.set(paymentRef, {
-                        clientId: clientRef.id,
-                        amount: installment.value,
-                        date: new Date().toISOString(),
-                        installmentId: installment.id,
-                    });
+                } else if (installment.status === 'pending' && remainingPayment > 0) {
+                     // This logic for partial payment is complex and maybe should be avoided in initial creation
+                     // For now, we only handle full installment payments.
                 }
             }
         }
-        batch.set(purchaseRef, newPurchase);
-        await updateProductStock(data.purchaseItem, 1, data.name, installmentValue);
+        
+        batch.set(purchaseRef, { ...newPurchase, id: purchaseRef.id });
+
+        // Update product stock after setting up purchase
+        await updateProductStock(data.purchaseItem, 1, data.name, data.purchaseValue);
     }
     
     await batch.commit();
@@ -150,8 +167,7 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
     const installmentValue = data.amount / installmentsCount;
     const intervalDays = data.installmentInterval || 30;
 
-    const newPurchase = {
-        id: purchaseRef.id,
+    const newPurchase: Omit<Purchase, 'id'> = {
         clientId: clientId,
         item: data.item,
         totalValue: data.amount,
@@ -160,49 +176,51 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
             id: crypto.randomUUID(),
             installmentNumber: i + 1,
             value: installmentValue,
-            dueDate: addDays(new Date(), (i + 1) * intervalDays).toISOString(),
+            dueDate: addDays(new Date(), i * intervalDays).toISOString(),
             status: 'pending',
         }))
     };
-    batch.set(purchaseRef, newPurchase);
+    batch.set(purchaseRef, { ...newPurchase, id: purchaseRef.id });
     
     const clientSnap = await getDoc(clientRef);
     const clientName = clientSnap.data()?.name || 'Cliente';
 
     await batch.commit();
-    await updateProductStock(data.item, 1, clientName, installmentValue);
+    await updateProductStock(data.item, 1, clientName, data.amount);
 };
 
 export const payInstallment = async (clientId: string, purchaseId: string, installmentId: string) => {
     const purchaseRef = doc(db, `clients/${clientId}/purchases`, purchaseId);
     
-    const batch = writeBatch(db);
-    
-    const purchaseSnap = await getDoc(purchaseRef);
-    if (!purchaseSnap.exists()) throw new Error("Purchase not found");
-    
-    const purchase = purchaseSnap.data() as Purchase;
-    let paidAmount = 0;
-    
-    const updatedInstallments = purchase.installments.map(inst => {
-        if (inst.id === installmentId && inst.status !== 'paid') {
-            paidAmount = inst.value;
-            return { ...inst, status: 'paid' as 'paid', paidDate: new Date().toISOString() };
-        }
-        return inst;
-    });
-
-    if(paidAmount > 0) {
-        batch.update(purchaseRef, { installments: updatedInstallments });
-        const paymentRef = doc(collection(db, `clients/${clientId}/payments`));
-        batch.set(paymentRef, {
-            clientId,
-            amount: paidAmount,
-            date: new Date().toISOString(),
-            installmentId: installmentId,
+    await runTransaction(db, async (transaction) => {
+        const purchaseSnap = await transaction.get(purchaseRef);
+        if (!purchaseSnap.exists()) throw new Error("Purchase not found");
+        
+        const purchase = purchaseSnap.data() as Purchase;
+        let paidAmount = 0;
+        let isUpdated = false;
+        
+        const updatedInstallments = purchase.installments.map(inst => {
+            if (inst.id === installmentId && inst.status !== 'paid') {
+                paidAmount = inst.value;
+                isUpdated = true;
+                return { ...inst, status: 'paid' as 'paid', paidDate: new Date().toISOString() };
+            }
+            return inst;
         });
-        await batch.commit();
-    }
+
+        if(isUpdated) {
+            transaction.update(purchaseRef, { installments: updatedInstallments });
+            const paymentRef = doc(collection(db, `clients/${clientId}/payments`));
+            transaction.set(paymentRef, {
+                clientId,
+                purchaseId,
+                amount: paidAmount,
+                date: new Date().toISOString(),
+                installmentId: installmentId,
+            });
+        }
+    });
 };
 
 export const addRelative = async (clientId: string, data: AddRelativeFormValues) => {
@@ -227,10 +245,11 @@ export const getProducts = async (): Promise<Product[]> => {
         const productData = { id: doc.id, ...doc.data() } as Omit<Product, 'history'>;
         const historyRef = collection(db, `products/${doc.id}/history`);
         const historySnap = await getDocs(historyRef);
-        const history = historySnap.docs.map(d => ({ id: d.id, ...d.data() } as ProductHistoryEntry));
+        const history = historySnap.docs.map(d => ({ id: d.id, ...d.data() } as ProductHistoryEntry))
+                                     .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         return { ...productData, history };
     }));
-    return products;
+    return products.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 };
 
 export const addProduct = async (data: AddProductFormValues) => {
@@ -258,9 +277,7 @@ export const addProduct = async (data: AddProductFormValues) => {
         }
 
         const newQuantity = type === 'purchase' ? currentQuantity + quantity : currentQuantity - quantity;
-        if(newQuantity < 0 && type === 'sale'){
-            // This is now allowed, but you might want business logic here in the future
-        }
+        
         transaction.update(productRef, { quantity: newQuantity });
         
         const historyRef = doc(collection(db, `products/${productRef.id}/history`));
@@ -280,17 +297,13 @@ export const updateProductStock = async (productName: string, quantitySold: numb
         const productSnapshot = await getDocs(q);
         
         if (productSnapshot.empty) {
-            throw new Error(`Produto "${productName}" não encontrado no estoque.`);
+            console.warn(`Produto "${productName}" não encontrado no estoque. Venda registrada sem atualização de estoque.`);
+            return; // Exit gracefully if product doesn't exist.
         }
         
         const productDoc = productSnapshot.docs[0];
         const productRef = productDoc.ref;
         const currentQuantity = productDoc.data().quantity || 0;
-
-        if (currentQuantity < quantitySold) {
-            // allowing negative stock, but you could throw an error here
-            // throw new Error(`Estoque insuficiente para ${productName}.`);
-        }
         
         const newQuantity = currentQuantity - quantitySold;
         transaction.update(productRef, { quantity: newQuantity });

@@ -1,17 +1,15 @@
+
 'use client';
 
 import {
-  getAuth,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
   type User,
 } from 'firebase/auth';
-import { app } from './firebase';
+import { auth } from './firebase'; // Import auth from firebase
 import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-
-const auth = getAuth(app);
 
 // Sign up
 export const signUp = (email: string, password: string) => {

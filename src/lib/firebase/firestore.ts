@@ -1,6 +1,6 @@
 
-import { db } from './firebase';
-import { getAuth } from 'firebase/auth';
+
+import { db, auth } from './firebase'; // Import auth from firebase
 import {
   collection,
   getDocs,
@@ -24,10 +24,8 @@ import type { AddProductFormValues } from '@/components/add-product-dialog';
 import type { EditProductFormValues } from '@/components/edit-product-dialog';
 import type { AddRelativeFormValues } from '@/components/add-relative-dialog';
 import { addDays } from 'date-fns';
-import { app } from './firebase'; // Import app
 
 const getUserId = () => {
-    const auth = getAuth(app); // Use getAuth(app) to ensure it's initialized
     const user = auth.currentUser;
     if (!user) throw new Error("Usuário não autenticado. Acesso negado.");
     return user.uid;
@@ -92,6 +90,7 @@ export const addClient = async (data: AddClientFormValues) => {
 
   try {
     await runTransaction(db, async (transaction) => {
+      // Generate IDs upfront
       const clientRef = doc(collection(db, `users/${userId}/clients`));
       const clientId = clientRef.id;
 
@@ -156,9 +155,8 @@ export const addClient = async (data: AddClientFormValues) => {
 
     // 3. Update Product Stock (occurs only after the transaction is successful)
     if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
-        const clientSnap = await getDoc(doc(db, `users/${userId}/clients`, data.name));
-        const clientName = clientSnap.exists() ? clientSnap.data().name : data.name;
-        await updateProductStock(data.purchaseItem, 1, clientName, data.purchaseValue, data.name);
+        // We need to fetch the client name from the form data as the client might not exist in db yet
+        await updateProductStock(data.purchaseItem, 1, data.name, data.purchaseValue, data.name);
     }
   } catch (e) {
       console.error("Transaction failed: ", e);

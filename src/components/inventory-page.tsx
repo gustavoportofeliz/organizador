@@ -84,17 +84,12 @@ export function InventoryPage() {
         const { name, quantity, unitPrice, type, isNewProduct } = data;
     
         const existingProductIndex = products.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
-        const existingProduct = products[existingProductIndex];
-
+    
         if (type === 'sale' && isNewProduct) {
             toast({ variant: 'destructive', title: 'Erro!', description: 'Não é possível vender um produto que não existe no estoque.' });
             return;
         }
 
-        if (type === 'sale' && !isNewProduct && existingProduct.quantity < quantity) {
-             // Does not block sale, just warns
-        }
-    
         const newHistoryEntry: ProductHistoryEntry = {
             id: crypto.randomUUID(),
             date: new Date().toISOString(),
@@ -108,14 +103,14 @@ export function InventoryPage() {
             const newProduct: Product = {
                 id: crypto.randomUUID(),
                 name: name,
-                quantity: quantity,
+                quantity: type === 'purchase' ? quantity : -quantity,
                 history: [newHistoryEntry],
                 createdAt: new Date().toISOString(),
             };
             setProducts(prevProducts => [newProduct, ...prevProducts]);
             toast({ title: 'Sucesso!', description: 'Novo produto adicionado.', className: 'bg-accent text-accent-foreground' });
         } else {
-            const updatedProducts = [...products];
+             const updatedProducts = [...products];
             const productToUpdate = { ...updatedProducts[existingProductIndex] };
     
             productToUpdate.quantity = type === 'purchase' 
@@ -237,10 +232,10 @@ export function InventoryPage() {
                             {filteredProducts.map(product => (
                                 <AccordionItem value={product.id} key={product.id} className={cn(product.quantity < 0 && 'bg-red-50 dark:bg-red-900/20')}>
                                     <div className="flex items-center w-full">
-                                        <AccordionTrigger className="flex-1">
-                                            <div className="flex justify-between w-full pr-4 items-center">
-                                                <span className="font-medium text-lg">{product.name}</span>
-                                                <div className="flex items-center gap-4 text-sm">
+                                        <AccordionTrigger className="flex-1 p-4">
+                                            <div className="flex justify-between w-full items-center">
+                                                <span className="font-medium text-lg text-left">{product.name}</span>
+                                                <div className="flex items-center gap-4 text-sm text-right">
                                                     <span className="text-muted-foreground">
                                                         Saldo: <span className={cn('font-bold', product.balance >= 0 ? 'text-green-600' : 'text-red-600')}>{formatCurrency(product.balance)}</span>
                                                     </span>
@@ -250,7 +245,7 @@ export function InventoryPage() {
                                                 </div>
                                             </div>
                                         </AccordionTrigger>
-                                        <div onClick={(e) => e.stopPropagation()}>
+                                        <div className="p-4" onClick={(e) => e.stopPropagation()}>
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
                                                     <Button variant="ghost" className="h-8 w-8 p-0">

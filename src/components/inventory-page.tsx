@@ -82,48 +82,50 @@ export function InventoryPage() {
 
     const handleAddProduct = (data: AddProductFormValues) => {
         const { name, quantity, unitPrice, type, isNewProduct } = data;
-    
-        const existingProductIndex = products.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
-    
+      
         if (type === 'sale' && isNewProduct) {
-            toast({ variant: 'destructive', title: 'Erro!', description: 'Não é possível vender um produto que não existe no estoque.' });
-            return;
+          toast({ variant: 'destructive', title: 'Erro!', description: 'Não é possível vender um produto que não existe no estoque.' });
+          return;
         }
-
+      
         const newHistoryEntry: ProductHistoryEntry = {
-            id: crypto.randomUUID(),
-            date: new Date().toISOString(),
-            type: type,
-            quantity: quantity,
-            unitPrice: unitPrice,
-            notes: type === 'purchase' ? 'Compra de estoque' : 'Venda manual',
+          id: crypto.randomUUID(),
+          date: new Date().toISOString(),
+          type: type,
+          quantity: quantity,
+          unitPrice: unitPrice,
+          notes: type === 'purchase' ? 'Compra de estoque' : 'Venda manual',
         };
-
-        if (isNewProduct) {
-            const newProduct: Product = {
+      
+        setProducts(prevProducts => {
+            const existingProductIndex = prevProducts.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
+          
+            if (isNewProduct) {
+              const newProduct: Product = {
                 id: crypto.randomUUID(),
                 name: name,
                 quantity: type === 'purchase' ? quantity : -quantity,
                 history: [newHistoryEntry],
                 createdAt: new Date().toISOString(),
-            };
-            setProducts(prevProducts => [newProduct, ...prevProducts]);
-            toast({ title: 'Sucesso!', description: 'Novo produto adicionado.', className: 'bg-accent text-accent-foreground' });
-        } else {
-             const updatedProducts = [...products];
-            const productToUpdate = { ...updatedProducts[existingProductIndex] };
-    
-            productToUpdate.quantity = type === 'purchase' 
-                ? productToUpdate.quantity + quantity 
-                : productToUpdate.quantity - quantity;
-            
-            productToUpdate.history = [newHistoryEntry, ...productToUpdate.history];
-            updatedProducts[existingProductIndex] = productToUpdate;
-            
-            setProducts(updatedProducts);
-            toast({ title: 'Sucesso!', description: 'Movimentação registrada.', className: 'bg-accent text-accent-foreground' });
-        }
-    };
+              };
+              toast({ title: 'Sucesso!', description: 'Novo produto adicionado.', className: 'bg-accent text-accent-foreground' });
+              return [newProduct, ...prevProducts];
+            } else {
+              const updatedProducts = [...prevProducts];
+              const productToUpdate = { ...updatedProducts[existingProductIndex] };
+      
+              productToUpdate.quantity = type === 'purchase' 
+                  ? productToUpdate.quantity + quantity 
+                  : productToUpdate.quantity - quantity;
+              
+              productToUpdate.history = [newHistoryEntry, ...productToUpdate.history];
+              updatedProducts[existingProductIndex] = productToUpdate;
+              
+              toast({ title: 'Sucesso!', description: 'Movimentação registrada.', className: 'bg-accent text-accent-foreground' });
+              return updatedProducts;
+            }
+        });
+      };
 
     const handleEditProduct = (data: EditProductFormValues) => {
         if (!selectedProduct) return;
@@ -231,21 +233,19 @@ export function InventoryPage() {
                         <Accordion type="multiple" className="w-full">
                             {filteredProducts.map(product => (
                                 <AccordionItem value={product.id} key={product.id} className={cn(product.quantity < 0 && 'bg-red-50 dark:bg-red-900/20')}>
-                                    <div className="flex items-center w-full">
-                                        <AccordionTrigger className="flex-1 p-4">
-                                            <div className="flex justify-between w-full items-center">
-                                                <span className="font-medium text-lg text-left">{product.name}</span>
-                                                <div className="flex items-center gap-4 text-sm text-right">
-                                                    <span className="text-muted-foreground">
-                                                        Saldo: <span className={cn('font-bold', product.balance >= 0 ? 'text-green-600' : 'text-red-600')}>{formatCurrency(product.balance)}</span>
-                                                    </span>
-                                                    <span className="text-muted-foreground">
-                                                        Quantidade: <span className={cn('font-bold', product.quantity > 0 ? 'text-green-600' : 'text-red-600')}>{product.quantity}</span>
-                                                    </span>
-                                                </div>
-                                            </div>
+                                    <div className="flex items-center w-full p-4">
+                                        <AccordionTrigger className="flex-1 p-0 hover:no-underline">
+                                             <span className="font-medium text-lg">{product.name}</span>
                                         </AccordionTrigger>
-                                        <div className="p-4" onClick={(e) => e.stopPropagation()}>
+                                        <div className="flex items-center gap-4 text-sm text-right ml-auto">
+                                            <span className="text-muted-foreground">
+                                                Saldo: <span className={cn('font-bold', product.balance >= 0 ? 'text-green-600' : 'text-red-600')}>{formatCurrency(product.balance)}</span>
+                                            </span>
+                                            <span className="text-muted-foreground">
+                                                Quantidade: <span className={cn('font-bold', product.quantity > 0 ? 'text-green-600' : 'text-red-600')}>{product.quantity}</span>
+                                            </span>
+                                        </div>
+                                        <div className="pl-4" onClick={(e) => e.stopPropagation()}>
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
                                                     <Button variant="ghost" className="h-8 w-8 p-0">
@@ -267,7 +267,7 @@ export function InventoryPage() {
                                         </div>
                                     </div>
                                     <AccordionContent>
-                                        <h4 className="font-semibold mb-2 px-1">Histórico de Movimentação</h4>
+                                        <h4 className="font-semibold mb-2 px-4">Histórico de Movimentação</h4>
                                         <Table>
                                              <TableHeader>
                                                 <TableRow>

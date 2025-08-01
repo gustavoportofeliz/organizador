@@ -1,7 +1,6 @@
 
 
-import { db } from './firebase'; 
-import { auth } from './auth'; // Import auth from the new source
+import { db, auth } from './firebase'; 
 import {
   collection,
   getDocs,

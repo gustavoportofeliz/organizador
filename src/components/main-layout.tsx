@@ -1,52 +1,22 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth, signOutUser } from '@/lib/firebase/auth';
 import Link from 'next/link';
-import { Users, Calendar, Archive, DollarSign, PanelLeft, Home, HelpCircle, LogOut, Loader2 } from 'lucide-react';
+import { Users, Calendar, Archive, DollarSign, PanelLeft, Home, HelpCircle } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Button } from '@/components/ui/button';
-import { Toaster } from "@/components/ui/toaster";
 
 export function MainLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const { user, loading } = useAuth();
   const router = useRouter();
-  const [isClient, setIsClient] = useState(false);
-
-  useEffect(() => {
-    // This ensures the component has mounted on the client, avoiding hydration mismatches.
-    setIsClient(true);
-  }, []);
-
-  useEffect(() => {
-    // Only run redirection logic on the client-side and once auth state is determined.
-    if (isClient && !loading && !user) {
-      router.push('/login');
-    }
-  }, [user, loading, router, isClient]);
-
-  const handleSignOut = async () => {
-    await signOutUser();
-    router.push('/login');
-  };
-
-  if (loading || !user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <Loader2 className="w-16 h-16 animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <>
@@ -79,10 +49,6 @@ export function MainLayout({
                   <HelpCircle />
                   <span>Ajuda</span>
                 </Link>
-                 <Button variant="ghost" size="sm" onClick={handleSignOut} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-                    <LogOut />
-                    <span>Sair</span>
-                 </Button>
           </nav>
 
           {/* Mobile Navigation */}
@@ -123,10 +89,6 @@ export function MainLayout({
                     <HelpCircle className="h-5 w-5" />
                     Ajuda
                 </Link>
-                 <Button variant="ghost" onClick={handleSignOut} className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground justify-start">
-                    <LogOut className="h-5 w-5" />
-                    Sair
-                 </Button>
               </nav>
             </SheetContent>
           </Sheet>
@@ -137,7 +99,6 @@ export function MainLayout({
           {children}
         </main>
       </div>
-      <Toaster />
     </>
   );
 }

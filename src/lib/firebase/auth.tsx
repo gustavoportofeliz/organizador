@@ -9,10 +9,10 @@ import {
   getAuth,
   type User,
 } from 'firebase/auth';
-import { app } from './firebase'; // Import app from firebase
+import { app } from './firebase'; // Import the initialized app
 import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 
-// This ensures auth is initialized with the app instance
+// Create the auth instance directly here, ensuring it uses the initialized app
 const auth = getAuth(app);
 
 // Sign up
@@ -61,3 +61,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 export const useAuth = () => {
   return useContext(AuthContext);
 };
+
+// Export auth for use in other parts of the application, like firestore rules
+export { auth };

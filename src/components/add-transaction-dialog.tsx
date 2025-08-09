@@ -32,7 +32,8 @@ import { ScrollArea } from './ui/scroll-area';
 
 const formSchema = z.object({
   item: z.string().min(1, { message: 'A descrição é obrigatória.' }),
-  amount: z.coerce.number().min(0.01, { message: 'O valor deve ser maior que zero.' }),
+  quantity: z.coerce.number().int().min(1, { message: 'A quantidade deve ser pelo menos 1.' }),
+  unitPrice: z.coerce.number().min(0.01, { message: 'O valor unitário deve ser maior que zero.' }),
   paymentMethod: z.enum(['Pix', 'Dinheiro', 'Cartão de Crédito', 'Cartão de Débito'], { required_error: "Forma de pagamento é obrigatória."}),
   splitPurchase: z.boolean().default(false),
   installments: z.coerce.number().min(1).max(6).optional(),
@@ -59,8 +60,9 @@ export function AddTransactionDialog({
   const form = useForm<AddTransactionFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      amount: 0,
       item: '',
+      quantity: 1,
+      unitPrice: 0,
       splitPurchase: false,
       installments: 1,
       installmentInterval: 30,
@@ -71,7 +73,7 @@ export function AddTransactionDialog({
   const splitPurchase = watch('splitPurchase');
 
   useEffect(() => {
-    reset({ amount: 0, item: '', splitPurchase: false, installments: 1, installmentInterval: 30 });
+    reset({ item: '', quantity: 1, unitPrice: 0, splitPurchase: false, installments: 1, installmentInterval: 30 });
   }, [open, reset]);
 
   const onSubmit = (data: AddTransactionFormValues) => {
@@ -118,19 +120,34 @@ export function AddTransactionDialog({
                     </FormItem>
                   )}
                 />
-                 <FormField
-                  control={control}
-                  name="amount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Valor da Compra (R$)</FormLabel>
-                      <FormControl>
-                        <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                    control={control}
+                    name="quantity"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Quantidade</FormLabel>
+                        <FormControl>
+                            <Input type="number" step="1" placeholder="1" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                    <FormField
+                    control={control}
+                    name="unitPrice"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Valor Unitário (R$)</FormLabel>
+                        <FormControl>
+                            <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                </div>
                 <FormField
                   control={form.control}
                   name="paymentMethod"

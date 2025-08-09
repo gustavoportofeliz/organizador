@@ -251,14 +251,16 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
         const clientName = clientSnap.data()?.name || 'Cliente';
         const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
         const purchaseRef = doc(collection(db, purchasePath));
+        
+        const totalValue = data.quantity * data.unitPrice;
         const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
-        const installmentValue = data.amount / installmentsCount;
+        const installmentValue = parseFloat((totalValue / installmentsCount).toFixed(2));
         const intervalDays = data.installmentInterval || 30;
 
         const newPurchase: Omit<Purchase, 'id'> = {
             clientId: clientId,
             item: data.item,
-            totalValue: data.amount,
+            totalValue: totalValue,
             paymentMethod: data.paymentMethod,
             date: new Date().toISOString(),
             installments: Array.from({ length: installmentsCount }, (_, i) => ({
@@ -272,7 +274,7 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
         };
         transaction.set(purchaseRef, { ...newPurchase, id: purchaseRef.id });
 
-        await updateProductStock(data.item, 1, clientName, data.amount, clientId, transaction);
+        await updateProductStock(data.item, data.quantity, clientName, data.unitPrice, clientId, transaction);
     });
 };
 

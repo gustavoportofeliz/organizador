@@ -34,7 +34,7 @@ const formSchema = z.object({
   item: z.string().min(1, { message: 'A descrição é obrigatória.' }),
   quantity: z.coerce.number().int().min(1, { message: 'A quantidade deve ser pelo menos 1.' }),
   unitPrice: z.coerce.number().min(0.01, { message: 'O valor unitário deve ser maior que zero.' }),
-  paymentMethod: z.enum(['Pix', 'Dinheiro', 'Cartão de Crédito', 'Cartão de Débito'], { required_error: "Forma de pagamento é obrigatória."}),
+  paymentMethod: z.enum(['Pix', 'Dinheiro', 'Cartão de Crédito', 'Cartão de Débito', 'Não selecionado'], { required_error: "Forma de pagamento é obrigatória."}),
   splitPurchase: z.boolean().default(false),
   installments: z.coerce.number().min(1).max(6).optional(),
   installmentInterval: z.coerce.number().min(1).optional().default(30),
@@ -63,6 +63,7 @@ export function AddTransactionDialog({
       item: '',
       quantity: 1,
       unitPrice: 0,
+      paymentMethod: 'Não selecionado',
       splitPurchase: false,
       installments: 1,
       installmentInterval: 30,
@@ -73,7 +74,7 @@ export function AddTransactionDialog({
   const splitPurchase = watch('splitPurchase');
 
   useEffect(() => {
-    reset({ item: '', quantity: 1, unitPrice: 0, splitPurchase: false, installments: 1, installmentInterval: 30 });
+    reset({ item: '', quantity: 1, unitPrice: 0, paymentMethod: 'Não selecionado', splitPurchase: false, installments: 1, installmentInterval: 30 });
   }, [open, reset]);
 
   const onSubmit = (data: AddTransactionFormValues) => {
@@ -161,6 +162,7 @@ export function AddTransactionDialog({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
+                          <SelectItem value="Não selecionado">Não selecionado</SelectItem>
                           <SelectItem value="Pix">Pix</SelectItem>
                           <SelectItem value="Dinheiro">Dinheiro</SelectItem>
                           <SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem>

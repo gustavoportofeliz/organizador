@@ -41,14 +41,14 @@ const formSchema = z.object({
   purchaseItem: z.string().optional(),
   purchaseValue: z.coerce.number().optional().default(0),
   paymentAmount: z.coerce.number().optional().default(0),
-  paymentMethod: z.enum(['Pix', 'Dinheiro', 'Cartão de Crédito', 'Cartão de Débito']).optional(),
+  paymentMethod: z.enum(['Pix', 'Dinheiro', 'Cartão de Crédito', 'Cartão de Débito', 'Não selecionado']).optional(),
   splitPurchase: z.boolean().default(false),
   installments: z.coerce.number().min(1).max(6).optional(),
   installmentInterval: z.coerce.number().min(1).optional().default(30),
 }).refine(data => !data.purchaseValue || data.purchaseValue <= 0 || !!data.purchaseItem, {
     message: "Você deve selecionar um item quando há um valor de compra.",
     path: ["purchaseItem"],
-}).refine(data => !data.paymentAmount || data.paymentAmount <= 0 || !!data.paymentMethod, {
+}).refine(data => !data.paymentAmount || data.paymentAmount <= 0 || (!!data.paymentMethod && data.paymentMethod !== 'Não selecionado'), {
     message: "Forma de pagamento é obrigatória quando há um pagamento inicial.",
     path: ["paymentMethod"],
 });
@@ -77,6 +77,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
       purchaseItem: '',
       purchaseValue: 0,
       paymentAmount: 0,
+      paymentMethod: 'Não selecionado',
       splitPurchase: false,
       installments: 1,
       installmentInterval: 30,
@@ -328,6 +329,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
+                          <SelectItem value="Não selecionado">Não selecionado</SelectItem>
                           <SelectItem value="Pix">Pix</SelectItem>
                           <SelectItem value="Dinheiro">Dinheiro</SelectItem>
                           <SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem>
@@ -353,5 +355,3 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
     </Dialog>
   );
 }
-
-    

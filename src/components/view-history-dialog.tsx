@@ -83,7 +83,7 @@ function PayInstallmentButton({ onPay }: { onPay: (paymentMethod: Installment['p
     const [isOpen, setIsOpen] = useState(false);
 
     const handlePay = () => {
-        if (method) {
+        if (method && method !== 'Não selecionado') {
             onPay(method);
             setIsOpen(false);
         }
@@ -109,13 +109,14 @@ function PayInstallmentButton({ onPay }: { onPay: (paymentMethod: Installment['p
                                 <SelectValue placeholder="Selecione..." />
                             </SelectTrigger>
                             <SelectContent>
+                                <SelectItem value="Não selecionado">Não selecionado</SelectItem>
                                 <SelectItem value="Pix">Pix</SelectItem>
                                 <SelectItem value="Dinheiro">Dinheiro</SelectItem>
                                 <SelectItem value="Cartão de Crédito">Cartão de Crédito</SelectItem>
                                 <SelectItem value="Cartão de Débito">Cartão de Débito</SelectItem>
                             </SelectContent>
                         </Select>
-                         <Button onClick={handlePay} disabled={!method} className="mt-2">Confirmar</Button>
+                         <Button onClick={handlePay} disabled={!method || method === 'Não selecionado'} className="mt-2">Confirmar</Button>
                     </div>
                 </div>
             </PopoverContent>
@@ -162,7 +163,7 @@ export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment
   }, [internalClient]);
 
   const handlePay = (purchaseId: string, installmentId: string, paymentMethod: Installment['paymentMethod']) => {
-    if (client) {
+    if (client && paymentMethod) {
       onPayInstallment(client.id, purchaseId, installmentId, paymentMethod);
     }
   }

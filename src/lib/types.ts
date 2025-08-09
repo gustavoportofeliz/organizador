@@ -1,3 +1,4 @@
+
 export type Installment = {
   id: string;
   installmentNumber: number;
@@ -5,7 +6,7 @@ export type Installment = {
   dueDate: string;
   status: 'pending' | 'paid' | 'overdue';
   paidDate?: string;
-  paymentMethod?: 'Pix' | 'Dinheiro' | 'Cartão de Crédito' | 'Cartão de Débito';
+  paymentMethod?: 'Pix' | 'Dinheiro' | 'Cartão de Crédito' | 'Cartão de Débito' | 'Não selecionado';
 };
 
 export type Purchase = {
@@ -16,7 +17,7 @@ export type Purchase = {
   installments: Installment[];
   date: string;
   clientId: string;
-  paymentMethod?: 'Pix' | 'Dinheiro' | 'Cartão de Crédito' | 'Cartão de Débito';
+  paymentMethod?: 'Pix' | 'Dinheiro' | 'Cartão de Crédito' | 'Cartão de Débito' | 'Não selecionado';
 };
 
 export type Payment = {
@@ -26,7 +27,7 @@ export type Payment = {
   purchaseId: string;
   installmentId?: string;
   clientId: string;
-  paymentMethod?: 'Pix' | 'Dinheiro' | 'Cartão de Crédito' | 'Cartão de Débito';
+  paymentMethod?: 'Pix' | 'Dinheiro' | 'Cartão de Crédito' | 'Cartão de Débito' | 'Não selecionado';
 };
 
 export type Relative = {

@@ -11,6 +11,7 @@ export type Installment = {
 export type Purchase = {
   id: string;
   item: string;
+  quantity: number;
   totalValue: number;
   installments: Installment[];
   date: string;
@@ -60,6 +61,7 @@ export type ProductHistoryEntry = {
     notes?: string;
     clientName?: string;
     clientId?: string;
+    purchaseId?: string;
 }
 
 export type Product = {

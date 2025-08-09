@@ -170,6 +170,7 @@ export const addClient = async (data: AddClientFormValues) => {
       const newPurchase: Omit<Purchase, 'id'> = {
         clientId: clientId,
         item: data.purchaseItem,
+        quantity: 1, // Assuming quantity 1 when adding client
         totalValue: data.purchaseValue,
         date: new Date().toISOString(),
         paymentMethod: data.paymentMethod,
@@ -181,31 +182,8 @@ export const addClient = async (data: AddClientFormValues) => {
       // Update product stock after purchase
       const clientName = data.name;
       
-      const productsQuery = query(productsCollection(), where("name", "==", data.purchaseItem));
-      // Read docs inside transaction for consistency
-      const productSnapshot = await getDocs(productsQuery);
-      
-      if (!productSnapshot.empty) {
-        const productDoc = productSnapshot.docs[0];
-        const productRefToUpdate = productDoc.ref; // Use .ref to get the DocumentReference
-        const productData = productDoc.data();
+      await updateProductStock(data.purchaseItem, 1, clientName, data.purchaseValue, clientId, transaction, purchaseId);
 
-        const newQuantity = (productData.quantity || 0) - 1;
-        transaction.update(productRefToUpdate, { quantity: newQuantity });
-        
-        const historyPath = `${getScopedPath()}/products/${productRefToUpdate.id}/history`;
-        const historyRef = doc(collection(db, historyPath));
-        const newHistoryEntry: Omit<ProductHistoryEntry, 'id'> = {
-            date: new Date().toISOString(),
-            type: 'sale',
-            quantity: 1,
-            unitPrice: data.purchaseValue,
-            notes: `Venda para ${clientName}`,
-            clientName,
-            clientId,
-        };
-        transaction.set(historyRef, { ...newHistoryEntry, id: historyRef.id });
-      }
     }
   });
 };
@@ -251,6 +229,7 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
         const clientName = clientSnap.data()?.name || 'Cliente';
         const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
         const purchaseRef = doc(collection(db, purchasePath));
+        const purchaseId = purchaseRef.id;
         
         const totalValue = data.quantity * data.unitPrice;
         const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
@@ -260,6 +239,7 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
         const newPurchase: Omit<Purchase, 'id'> = {
             clientId: clientId,
             item: data.item,
+            quantity: data.quantity,
             totalValue: totalValue,
             paymentMethod: data.paymentMethod,
             date: new Date().toISOString(),
@@ -272,9 +252,9 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
                 paymentMethod: i === 0 ? data.paymentMethod : undefined, // Assign method to first installment if not split
             }))
         };
-        transaction.set(purchaseRef, { ...newPurchase, id: purchaseRef.id });
+        transaction.set(purchaseRef, { ...newPurchase, id: purchaseId });
 
-        await updateProductStock(data.item, data.quantity, clientName, data.unitPrice, clientId, transaction);
+        await updateProductStock(data.item, data.quantity, clientName, data.unitPrice, clientId, transaction, purchaseId);
     });
 };
 
@@ -320,63 +300,65 @@ export const payInstallment = async (clientId: string, purchaseId: string, insta
 export const cancelInstallment = async (clientId: string, purchaseId: string, installmentId: string) => {
     const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
     const purchaseRef = doc(db, purchasePath, purchaseId);
-    
+
     await runTransaction(db, async (transaction) => {
         const purchaseSnap = await transaction.get(purchaseRef);
         if (!purchaseSnap.exists()) throw new Error("Purchase not found");
-    
+
         const purchase = purchaseSnap.data() as Purchase;
         const installmentToCancel = purchase.installments.find(inst => inst.id === installmentId);
-    
+
         if (!installmentToCancel) {
             throw new Error("Installment not found.");
         }
-    
+
         // If the installment was paid, find and delete the corresponding payment transaction
         if (installmentToCancel.status === 'paid') {
             const paymentQuery = query(
-                collection(db, `${getScopedPath()}/clients/${clientId}/payments`), 
-                where("purchaseId", "==", purchaseId),
+                collection(db, `${getScopedPath()}/clients/${clientId}/payments`),
                 where("installmentId", "==", installmentId)
             );
-            const paymentSnap = await getDocs(paymentQuery); // Must read inside transaction
+            const paymentSnap = await getDocs(paymentQuery);
             paymentSnap.forEach(paymentDoc => {
                 transaction.delete(paymentDoc.ref);
             });
         }
-        
+
         // Remove the installment
         let remainingInstallments = purchase.installments.filter(inst => inst.id !== installmentId);
-    
+
         // Renumber remaining installments
         remainingInstallments = remainingInstallments.map((inst, index) => ({
             ...inst,
             installmentNumber: index + 1
         }));
-        
+
         // Recalculate total value
         const newTotalValue = remainingInstallments.reduce((sum, inst) => sum + inst.value, 0);
-    
-        // If there are no installments left, delete the purchase. Otherwise, update it.
+
+        // If there are no installments left, delete the purchase and restore stock
         if (remainingInstallments.length === 0) {
             transaction.delete(purchaseRef);
-    
+            // Restore stock since the entire purchase is cancelled
+            await restoreProductStock(purchase.item, purchase.quantity, purchase.id, transaction);
+
             // Also delete any associated payment if it was an initial single-payment purchase without a specific installmentId
             const initialPaymentQuery = query(collection(db, `${getScopedPath()}/clients/${clientId}/payments`), where("purchaseId", "==", purchaseId));
-            const initialPaymentSnap = await getDocs(initialPaymentQuery); // Must read inside transaction
+            const initialPaymentSnap = await getDocs(initialPaymentQuery);
             initialPaymentSnap.forEach(paymentDoc => {
                 if (!paymentDoc.data().installmentId) {
                     transaction.delete(paymentDoc.ref);
                 }
             });
-    
+
         } else {
-            transaction.update(purchaseRef, { 
+            transaction.update(purchaseRef, {
                 installments: remainingInstallments,
-                totalValue: newTotalValue 
+                totalValue: newTotalValue
             });
+             // We don't restore stock here as the purchase is still active, just with fewer installments.
+             // Business logic decision: cancelling one installment doesn't mean product return.
         }
-    
     });
 };
 
@@ -456,21 +438,16 @@ export const addProduct = async (data: AddProductFormValues) => {
 };
 
 
-export const updateProductStock = async (productName: string, quantitySold: number, clientName: string, unitPrice: number, clientId: string, transaction: any) => {
+export const updateProductStock = async (productName: string, quantitySold: number, clientName: string, unitPrice: number, clientId: string, transaction: any, purchaseId: string) => {
     const productsQuery = query(productsCollection(), where("name", "==", productName));
-    // This read needs to be done via the transaction object if it's part of one.
-    // However, since we get `getDocs` directly, we can't use the transaction.
-    // For this to be transactionally safe, reads must use `transaction.get()`.
-    // Let's assume for now this is called from a context where this is safe.
-    // A better approach would be to pass the transaction object to this helper.
-    const productSnapshotDocs = (await transaction.get(productsQuery)).docs;
+    const productSnapshot = await transaction.get(productsQuery);
     
-    if (productSnapshotDocs.length === 0) {
+    if (productSnapshot.empty) {
         console.warn(`Produto "${productName}" não encontrado no estoque. Venda registrada sem atualização de estoque.`);
         return;
     }
     
-    const productDoc = productSnapshotDocs[0];
+    const productDoc = productSnapshot.docs[0];
     const productRef = productDoc.ref;
     const currentQuantity = productDoc.data().quantity || 0;
     
@@ -479,7 +456,7 @@ export const updateProductStock = async (productName: string, quantitySold: numb
     
     const historyPath = `${getScopedPath()}/products/${productRef.id}/history`;
     const historyRef = doc(collection(db, historyPath));
-    const newHistoryEntry: Omit<ProductHistoryEntry, 'id'> = {
+    const newHistoryEntry: Omit<ProductHistoryEntry, 'id' | 'purchaseId'> & { purchaseId: string } = {
         date: new Date().toISOString(),
         type: 'sale',
         quantity: quantitySold,
@@ -487,9 +464,40 @@ export const updateProductStock = async (productName: string, quantitySold: numb
         notes: `Venda para ${clientName}`,
         clientName,
         clientId,
+        purchaseId,
     };
     transaction.set(historyRef, { ...newHistoryEntry, id: historyRef.id });
 }
+
+export const restoreProductStock = async (productName: string, quantityToRestore: number, purchaseId: string, transaction: any) => {
+    const productsQuery = query(productsCollection(), where("name", "==", productName));
+    const productSnapshot = await transaction.get(productsQuery);
+
+    if (productSnapshot.empty) {
+        console.warn(`Produto "${productName}" não encontrado. Não foi possível restaurar o estoque.`);
+        return;
+    }
+
+    const productDoc = productSnapshot.docs[0];
+    const productRef = productDoc.ref;
+    const currentQuantity = productDoc.data().quantity || 0;
+    const newQuantity = currentQuantity + quantityToRestore;
+
+    transaction.update(productRef, { quantity: newQuantity });
+
+    // Remove the sale entry from the product's history
+    const historyQuery = query(collection(db, `${getScopedPath()}/products/${productRef.id}/history`), where("purchaseId", "==", purchaseId));
+    const historySnapshot = await getDocs(historyQuery); // Must read outside transaction or pass transaction to getDocs
+    
+    // We can't use `getDocs` with a transaction object. We'll have to find the document to delete in a less direct way if needed,
+    // or assume we can read and then write. For simplicity here, we get the docs and then delete within the transaction.
+    // In a high-concurrency environment, this might need rethinking.
+    const historyDocsToDelete = (await transaction.get(historyQuery)).docs;
+
+    historyDocsToDelete.forEach(docToDelete => {
+        transaction.delete(docToDelete.ref);
+    });
+};
 
 
 export const editProduct = async (id: string, data: EditProductFormValues) => {

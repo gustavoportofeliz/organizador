@@ -25,12 +25,24 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Label } from './ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 interface ViewHistoryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   client: Client | null;
   onPayInstallment: (clientId: string, purchaseId: string, installmentId: string, paymentMethod: Installment['paymentMethod']) => void;
+  onCancelInstallment: (clientId: string, purchaseId: string, installmentId: string) => void;
 }
 
 const formatCurrency = (amount: number) => {
@@ -111,7 +123,30 @@ function PayInstallmentButton({ onPay }: { onPay: (paymentMethod: Installment['p
     )
 }
 
-export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment }: ViewHistoryDialogProps) {
+function CancelInstallmentButton({ onCancel }: { onCancel: () => void }) {
+    return (
+        <AlertDialog>
+            <AlertDialogTrigger asChild>
+                <Button size="sm" variant="destructive">Cancelar</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    Esta ação não pode ser desfeita. A parcela será permanentemente removida e o valor total da compra será ajustado.
+                </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                <AlertDialogCancel>Voltar</AlertDialogCancel>
+                <AlertDialogAction onClick={onCancel} className={cn(buttonVariants({ variant: "destructive" }))}>Confirmar Cancelamento</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    );
+}
+
+
+export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment, onCancelInstallment }: ViewHistoryDialogProps) {
 
   // Local state to reflect UI changes immediately
   const [internalClient, setInternalClient] = useState(client);
@@ -128,29 +163,13 @@ export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment
 
   const handlePay = (purchaseId: string, installmentId: string, paymentMethod: Installment['paymentMethod']) => {
     if (client) {
-      // Optimistic update
-      setInternalClient(prevClient => {
-          if (!prevClient) return null;
-          const newClient = { ...prevClient };
-          newClient.purchases = newClient.purchases.map(p => {
-              if (p.id === purchaseId) {
-                  return {
-                      ...p,
-                      installments: p.installments.map(i => {
-                          if (i.id === installmentId) {
-                              return { ...i, status: 'paid', paidDate: new Date().toISOString(), paymentMethod };
-                          }
-                          return i;
-                      })
-                  };
-              }
-              return p;
-          });
-          return newClient;
-      });
-
-      // Call the actual update function
       onPayInstallment(client.id, purchaseId, installmentId, paymentMethod);
+    }
+  }
+
+  const handleCancel = (purchaseId: string, installmentId: string) => {
+    if(client) {
+      onCancelInstallment(client.id, purchaseId, installmentId);
     }
   }
 
@@ -201,11 +220,16 @@ export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment
                                                 {formatCurrency(inst.value)}
                                             </TableCell>
                                             <TableCell className="text-center">
-                                                {inst.status !== 'paid' ? (
-                                                    <PayInstallmentButton onPay={(method) => handlePay(purchase.id, inst.id, method)} />
-                                                ) : (
-                                                    <span className="text-sm font-semibold text-green-600">Quitado</span>
-                                                )}
+                                                <div className="flex gap-2 justify-center">
+                                                    {inst.status !== 'paid' ? (
+                                                        <>
+                                                           <PayInstallmentButton onPay={(method) => handlePay(purchase.id, inst.id, method)} />
+                                                           <CancelInstallmentButton onCancel={() => handleCancel(purchase.id, inst.id)} />
+                                                        </>
+                                                    ) : (
+                                                        <span className="text-sm font-semibold text-green-600">Quitado</span>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))}

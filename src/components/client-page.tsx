@@ -49,6 +49,7 @@ import {
   getClient, 
   getClients, 
   payInstallment as payInstallmentInDb,
+  cancelInstallment as cancelInstallmentInDb,
   getProducts,
 } from '@/lib/firebase/firestore';
 
@@ -209,6 +210,21 @@ export function ClientPage() {
     } catch(error) {
       console.error("Error paying installment:", error);
       toast({ variant: "destructive", title: "Erro!", description: "Não foi possível quitar a parcela." });
+    }
+  };
+
+  const handleCancelInstallment = async (clientId: string, purchaseId: string, installmentId: string) => {
+    try {
+      await cancelInstallmentInDb(clientId, purchaseId, installmentId);
+      toast({ title: 'Sucesso!', description: 'Parcela cancelada.', className: 'bg-accent text-accent-foreground' });
+      fetchAllData();
+      if (selectedClient) {
+        const updatedClient = await getClient(selectedClient.id);
+        setSelectedClient(updatedClient);
+      }
+    } catch (error) {
+      console.error("Error canceling installment:", error);
+      toast({ variant: "destructive", title: "Erro!", description: "Não foi possível cancelar a parcela." });
     }
   };
 
@@ -387,6 +403,7 @@ export function ClientPage() {
         onOpenChange={setViewHistoryOpen}
         client={selectedClient}
         onPayInstallment={handlePayInstallment}
+        onCancelInstallment={handleCancelInstallment}
       />
       <EditClientDialog
         open={isEditClientOpen}

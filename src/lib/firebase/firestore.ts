@@ -303,6 +303,55 @@ export const payInstallment = async (clientId: string, purchaseId: string, insta
     });
 };
 
+export const cancelInstallment = async (clientId: string, purchaseId: string, installmentId: string) => {
+    const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
+    const purchaseRef = doc(db, purchasePath, purchaseId);
+
+    await runTransaction(db, async (transaction) => {
+        const purchaseSnap = await transaction.get(purchaseRef);
+        if (!purchaseSnap.exists()) throw new Error("Purchase not found");
+
+        const purchase = purchaseSnap.data() as Purchase;
+        const installmentToCancel = purchase.installments.find(inst => inst.id === installmentId);
+
+        if (!installmentToCancel || installmentToCancel.status === 'paid') {
+            throw new Error("Installment not found or already paid.");
+        }
+        
+        // Remove the installment
+        let remainingInstallments = purchase.installments.filter(inst => inst.id !== installmentId);
+
+        // Renumber remaining installments
+        remainingInstallments = remainingInstallments.map((inst, index) => ({
+            ...inst,
+            installmentNumber: index + 1
+        }));
+        
+        // Recalculate total value
+        const newTotalValue = remainingInstallments.reduce((sum, inst) => sum + inst.value, 0);
+
+        // If there are no installments left, delete the purchase. Otherwise, update it.
+        if (remainingInstallments.length === 0) {
+            transaction.delete(purchaseRef);
+
+            // Also delete any associated payment if it was a single-payment purchase
+            const paymentQuery = query(collection(db, `${getScopedPath()}/clients/${clientId}/payments`), where("purchaseId", "==", purchaseId));
+            const paymentSnap = await getDocs(paymentQuery);
+            paymentSnap.forEach(paymentDoc => {
+                transaction.delete(paymentDoc.ref);
+            });
+
+        } else {
+            transaction.update(purchaseRef, { 
+                installments: remainingInstallments,
+                totalValue: newTotalValue 
+            });
+        }
+
+    });
+};
+
+
 export const addRelative = async (clientId: string, data: AddRelativeFormValues) => {
     const clientRef = doc(clientsCollection(), clientId);
     const clientSnap = await getDoc(clientRef);

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
@@ -205,7 +204,7 @@ export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment
                                         <TableHead>Parcela</TableHead>
                                         <TableHead>Vencimento</TableHead>
                                         <TableHead>Status</TableHead>
-                                        <TableHead>Método Pgto.</TableHead>
+                                        <TableHead className="hidden sm:table-cell">Método Pgto.</TableHead>
                                         <TableHead className="text-right">Valor</TableHead>
                                         <TableHead className="text-center">Ação</TableHead>
                                     </TableRow>
@@ -216,7 +215,7 @@ export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment
                                             <TableCell>{inst.installmentNumber} / {purchase.installments.length}</TableCell>
                                             <TableCell>{formatDate(inst.dueDate)}</TableCell>
                                             <TableCell>{getStatusBadge(inst.status)}</TableCell>
-                                            <TableCell>{inst.paymentMethod || '-'}</TableCell>
+                                            <TableCell className="hidden sm:table-cell">{inst.paymentMethod || '-'}</TableCell>
                                             <TableCell className={cn('text-right font-medium', inst.status === 'overdue' ? 'text-destructive' : '')}>
                                                 {formatCurrency(inst.value)}
                                             </TableCell>

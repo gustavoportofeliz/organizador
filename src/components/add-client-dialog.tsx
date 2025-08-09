@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -29,6 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { Product } from '@/lib/types';
 import React from 'react';
 import { ScrollArea } from './ui/scroll-area';
+import { format, parse } from 'date-fns';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Nome deve ter pelo menos 2 caracteres.' }),
@@ -90,6 +90,16 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
   const paymentAmount = watch('paymentAmount');
 
   const onSubmit = (data: AddClientFormValues) => {
+    if (data.birthDate) {
+        try {
+            const date = new Date(data.birthDate);
+            const tzoffset = (new Date()).getTimezoneOffset() * 60000;
+            const localDate = new Date(date.getTime() + tzoffset);
+            data.birthDate = format(localDate, 'dd/MM/yyyy');
+        } catch (e) {
+            console.error("Could not format date on submit:", data.birthDate);
+        }
+    }
     onAddClient(data);
     onOpenChange(false);
     form.reset();
@@ -146,7 +156,7 @@ export function AddClientDialog({ open, onOpenChange, onAddClient, products }: A
                     <FormItem>
                       <FormLabel>Data de Nascimento</FormLabel>
                       <FormControl>
-                        <Input type="text" placeholder="DD/MM/AAAA" {...field} />
+                        <Input type="date" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

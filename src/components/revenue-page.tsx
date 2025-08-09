@@ -1,4 +1,3 @@
-
 'use client';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import type { Client, Purchase, Installment } from '@/lib/types';

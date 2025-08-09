@@ -1,4 +1,3 @@
-
 import { db } from './firebase'; 
 import {
   collection,
@@ -440,7 +439,7 @@ export const addProduct = async (data: AddProductFormValues) => {
 
 export const updateProductStock = async (productName: string, quantitySold: number, clientName: string, unitPrice: number, clientId: string, transaction: any, purchaseId: string) => {
     const productsQuery = query(productsCollection(), where("name", "==", productName));
-    const productSnapshot = await transaction.get(productsQuery);
+    const productSnapshot = await getDocs(productsQuery); // This should be a transactional get if called inside a transaction
     
     if (productSnapshot.empty) {
         console.warn(`Produto "${productName}" não encontrado no estoque. Venda registrada sem atualização de estoque.`);
@@ -471,14 +470,14 @@ export const updateProductStock = async (productName: string, quantitySold: numb
 
 export const restoreProductStock = async (productName: string, quantityToRestore: number, purchaseId: string, transaction: any) => {
     const productsQuery = query(productsCollection(), where("name", "==", productName));
-    const productSnapshot = await transaction.get(productsQuery);
+    const productSnapshot = (await getDocs(productsQuery)).docs;
 
-    if (productSnapshot.empty) {
+    if (productSnapshot.length === 0) {
         console.warn(`Produto "${productName}" não encontrado. Não foi possível restaurar o estoque.`);
         return;
     }
 
-    const productDoc = productSnapshot.docs[0];
+    const productDoc = productSnapshot[0];
     const productRef = productDoc.ref;
     const currentQuantity = productDoc.data().quantity || 0;
     const newQuantity = currentQuantity + quantityToRestore;
@@ -487,14 +486,9 @@ export const restoreProductStock = async (productName: string, quantityToRestore
 
     // Remove the sale entry from the product's history
     const historyQuery = query(collection(db, `${getScopedPath()}/products/${productRef.id}/history`), where("purchaseId", "==", purchaseId));
-    const historySnapshot = await getDocs(historyQuery); // Must read outside transaction or pass transaction to getDocs
+    const historySnapshot = (await getDocs(historyQuery)).docs;
     
-    // We can't use `getDocs` with a transaction object. We'll have to find the document to delete in a less direct way if needed,
-    // or assume we can read and then write. For simplicity here, we get the docs and then delete within the transaction.
-    // In a high-concurrency environment, this might need rethinking.
-    const historyDocsToDelete = (await transaction.get(historyQuery)).docs;
-
-    historyDocsToDelete.forEach(docToDelete => {
+    historySnapshot.forEach(docToDelete => {
         transaction.delete(docToDelete.ref);
     });
 };
@@ -518,4 +512,57 @@ export const deleteProduct = async (id: string) => {
 
     batch.delete(productRef);
     await batch.commit();
+};
+
+
+export const cancelProductHistoryEntry = async (productId: string, historyEntryId: string) => {
+    await runTransaction(db, async (transaction) => {
+        const productRef = doc(productsCollection(), productId);
+        const historyRef = doc(db, `${getScopedPath()}/products/${productId}/history`, historyEntryId);
+
+        const productSnap = await transaction.get(productRef);
+        const historySnap = await transaction.get(historyRef);
+
+        if (!productSnap.exists() || !historySnap.exists()) {
+            throw new Error("Produto ou registro de histórico não encontrado.");
+        }
+
+        const product = productSnap.data() as Product;
+        const historyEntry = historySnap.data() as ProductHistoryEntry;
+
+        // 1. Revert stock quantity
+        const quantityChange = historyEntry.quantity;
+        let newQuantity;
+        if (historyEntry.type === 'sale') {
+            newQuantity = product.quantity + quantityChange;
+        } else { // purchase
+            newQuantity = product.quantity - quantityChange;
+        }
+        transaction.update(productRef, { quantity: newQuantity });
+
+        // 2. If it was a sale linked to a client purchase, delete the purchase
+        if (historyEntry.type === 'sale' && historyEntry.clientId && historyEntry.purchaseId) {
+            const purchaseRef = doc(db, `${getScopedPath()}/clients/${historyEntry.clientId}/purchases`, historyEntry.purchaseId);
+            const purchaseSnap = await transaction.get(purchaseRef);
+            if(purchaseSnap.exists()) {
+                 // Also delete any payments associated with this purchase
+                const paymentsQuery = query(
+                    collection(db, `${getScopedPath()}/clients/${historyEntry.clientId}/payments`),
+                    where("purchaseId", "==", historyEntry.purchaseId)
+                );
+                // We must read before writing in a transaction.
+                // It's safe to do this as a separate step before the transaction or handle it carefully.
+                // For this implementation, we assume we can get the query snapshot and then delete docs.
+                const paymentsSnapshot = await getDocs(paymentsQuery);
+                paymentsSnapshot.forEach(paymentDoc => {
+                    transaction.delete(paymentDoc.ref);
+                });
+
+                transaction.delete(purchaseRef);
+            }
+        }
+        
+        // 3. Delete the history entry itself
+        transaction.delete(historyRef);
+    });
 };

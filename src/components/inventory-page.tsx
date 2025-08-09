@@ -1,7 +1,6 @@
-
 'use client';
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import type { Product } from '@/lib/types';
+import type { Product, ProductHistoryEntry } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -32,6 +31,7 @@ import {
 import { AddProductDialog, type AddProductFormValues } from '@/components/add-product-dialog';
 import { EditProductDialog, type EditProductFormValues } from '@/components/edit-product-dialog';
 import { DeleteProductConfirmationDialog } from '@/components/delete-product-confirmation-dialog';
+import { DeleteMovementConfirmationDialog } from '@/components/delete-movement-confirmation-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,7 +39,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import { addProduct, getProducts, editProduct as editProductInDb, deleteProduct as deleteProductFromDb } from '@/lib/firebase/firestore';
+import { addProduct, getProducts, editProduct as editProductInDb, deleteProduct as deleteProductFromDb, cancelProductHistoryEntry } from '@/lib/firebase/firestore';
   
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -65,7 +65,9 @@ export function InventoryPage() {
     const [isAddProductOpen, setAddProductOpen] = useState(false);
     const [isEditProductOpen, setEditProductOpen] = useState(false);
     const [isDeleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [isDeleteMovementConfirmOpen, setDeleteMovementConfirmOpen] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+    const [selectedMovement, setSelectedMovement] = useState<ProductHistoryEntry | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const { toast } = useToast();
 
@@ -130,6 +132,19 @@ export function InventoryPage() {
             toast({ variant: 'destructive', title: 'Erro!', description: 'Não foi possível remover o produto.' });
         }
     };
+
+    const handleDeleteMovement = async () => {
+        if (!selectedProduct || !selectedMovement) return;
+        try {
+            await cancelProductHistoryEntry(selectedProduct.id, selectedMovement.id);
+            toast({ title: 'Sucesso!', description: 'Movimentação cancelada.', className: 'bg-destructive text-destructive-foreground' });
+            fetchProducts();
+            setDeleteMovementConfirmOpen(false);
+        } catch (error) {
+            console.error("Error canceling movement:", error);
+            toast({ variant: 'destructive', title: 'Erro!', description: 'Não foi possível cancelar a movimentação.' });
+        }
+    };
     
     const openEditDialog = (product: Product) => {
         setSelectedProduct(product);
@@ -140,6 +155,12 @@ export function InventoryPage() {
         setSelectedProduct(product);
         setDeleteConfirmOpen(true);
     };
+
+    const openDeleteMovementDialog = (product: Product, movement: ProductHistoryEntry) => {
+        setSelectedProduct(product);
+        setSelectedMovement(movement);
+        setDeleteMovementConfirmOpen(true);
+    }
 
     const filteredProducts = useMemo(() => {
         return products.map(product => {
@@ -267,12 +288,13 @@ export function InventoryPage() {
                                                         <TableHead className="hidden sm:table-cell">Cliente</TableHead>
                                                         <TableHead>Qtd</TableHead>
                                                         <TableHead className="text-right">Valor</TableHead>
+                                                        <TableHead className="text-center">Ação</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
                                                     {product.history.length === 0 ? (
                                                         <TableRow>
-                                                            <TableCell colSpan={5} className="text-center text-muted-foreground">
+                                                            <TableCell colSpan={6} className="text-center text-muted-foreground">
                                                                 Nenhuma movimentação registrada.
                                                             </TableCell>
                                                         </TableRow>
@@ -288,6 +310,16 @@ export function InventoryPage() {
                                                             <TableCell className="hidden sm:table-cell">{entry.clientName || '-'}</TableCell>
                                                             <TableCell>{entry.quantity}</TableCell>
                                                             <TableCell className="text-right">{formatCurrency(entry.unitPrice)}</TableCell>
+                                                            <TableCell className="text-center">
+                                                                <Button 
+                                                                    variant="ghost" 
+                                                                    size="icon" 
+                                                                    className="h-8 w-8 text-destructive hover:text-destructive"
+                                                                    onClick={() => openDeleteMovementDialog(product, entry)}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </TableCell>
                                                         </TableRow>
                                                         ))
                                                     )}
@@ -322,6 +354,12 @@ export function InventoryPage() {
                 onOpenChange={setDeleteConfirmOpen}
                 onConfirm={handleDeleteProduct}
                 productName={selectedProduct?.name}
+            />
+             <DeleteMovementConfirmationDialog
+                open={isDeleteMovementConfirmOpen}
+                onOpenChange={setDeleteMovementConfirmOpen}
+                onConfirm={handleDeleteMovement}
+                movementInfo={selectedMovement}
             />
         </div>
     )

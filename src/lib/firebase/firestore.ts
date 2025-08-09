@@ -75,9 +75,20 @@ export const getClients = async (): Promise<Client[]> => {
   const clients: Client[] = await Promise.all(snapshot.docs.map(async (doc) => {
     const clientData = { id: doc.id, ...doc.data() } as Omit<Client, 'purchases' | 'payments' | 'relatives'>;
     const { purchases, payments, relatives } = await getClientSubcollections(doc.id);
-    return { ...clientData, purchases, payments, relatives };
+    const client: Client = { ...clientData, purchases, payments, relatives };
+
+    // Calculate derived values on the client-side for display if needed
+    const { totalPurchases, totalPayments, balance } = getClientTotals(client);
+    return { ...client, totalPurchases, totalPayments, balance };
   }));
   return clients;
+};
+
+export const getClientTotals = (client: Client) => {
+    const totalPurchases = client.purchases.reduce((sum, p) => sum + p.totalValue, 0);
+    const totalPayments = client.payments.reduce((sum, p) => sum + p.amount, 0);
+    const balance = totalPurchases - totalPayments;
+    return { totalPurchases, totalPayments, balance };
 };
 
 export const getClient = async (id: string): Promise<Client> => {
@@ -171,6 +182,7 @@ export const addClient = async (data: AddClientFormValues) => {
       const clientName = data.name;
       
       const productsQuery = query(productsCollection(), where("name", "==", data.purchaseItem));
+      // Read docs inside transaction for consistency
       const productSnapshot = await getDocs(productsQuery);
       
       if (!productSnapshot.empty) {
@@ -306,21 +318,34 @@ export const payInstallment = async (clientId: string, purchaseId: string, insta
 export const cancelInstallment = async (clientId: string, purchaseId: string, installmentId: string) => {
     const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
     const purchaseRef = doc(db, purchasePath, purchaseId);
-
+    
     await runTransaction(db, async (transaction) => {
         const purchaseSnap = await transaction.get(purchaseRef);
         if (!purchaseSnap.exists()) throw new Error("Purchase not found");
-
+    
         const purchase = purchaseSnap.data() as Purchase;
         const installmentToCancel = purchase.installments.find(inst => inst.id === installmentId);
-
-        if (!installmentToCancel || installmentToCancel.status === 'paid') {
-            throw new Error("Installment not found or already paid.");
+    
+        if (!installmentToCancel) {
+            throw new Error("Installment not found.");
+        }
+    
+        // If the installment was paid, find and delete the corresponding payment transaction
+        if (installmentToCancel.status === 'paid') {
+            const paymentQuery = query(
+                collection(db, `${getScopedPath()}/clients/${clientId}/payments`), 
+                where("purchaseId", "==", purchaseId),
+                where("installmentId", "==", installmentId)
+            );
+            const paymentSnap = await getDocs(paymentQuery); // Must read inside transaction
+            paymentSnap.forEach(paymentDoc => {
+                transaction.delete(paymentDoc.ref);
+            });
         }
         
         // Remove the installment
         let remainingInstallments = purchase.installments.filter(inst => inst.id !== installmentId);
-
+    
         // Renumber remaining installments
         remainingInstallments = remainingInstallments.map((inst, index) => ({
             ...inst,
@@ -329,25 +354,27 @@ export const cancelInstallment = async (clientId: string, purchaseId: string, in
         
         // Recalculate total value
         const newTotalValue = remainingInstallments.reduce((sum, inst) => sum + inst.value, 0);
-
+    
         // If there are no installments left, delete the purchase. Otherwise, update it.
         if (remainingInstallments.length === 0) {
             transaction.delete(purchaseRef);
-
-            // Also delete any associated payment if it was a single-payment purchase
-            const paymentQuery = query(collection(db, `${getScopedPath()}/clients/${clientId}/payments`), where("purchaseId", "==", purchaseId));
-            const paymentSnap = await getDocs(paymentQuery);
-            paymentSnap.forEach(paymentDoc => {
-                transaction.delete(paymentDoc.ref);
+    
+            // Also delete any associated payment if it was an initial single-payment purchase without a specific installmentId
+            const initialPaymentQuery = query(collection(db, `${getScopedPath()}/clients/${clientId}/payments`), where("purchaseId", "==", purchaseId));
+            const initialPaymentSnap = await getDocs(initialPaymentQuery); // Must read inside transaction
+            initialPaymentSnap.forEach(paymentDoc => {
+                if (!paymentDoc.data().installmentId) {
+                    transaction.delete(paymentDoc.ref);
+                }
             });
-
+    
         } else {
             transaction.update(purchaseRef, { 
                 installments: remainingInstallments,
                 totalValue: newTotalValue 
             });
         }
-
+    
     });
 };
 
@@ -429,14 +456,19 @@ export const addProduct = async (data: AddProductFormValues) => {
 
 export const updateProductStock = async (productName: string, quantitySold: number, clientName: string, unitPrice: number, clientId: string, transaction: any) => {
     const productsQuery = query(productsCollection(), where("name", "==", productName));
-    const productSnapshot = await getDocs(productsQuery);
+    // This read needs to be done via the transaction object if it's part of one.
+    // However, since we get `getDocs` directly, we can't use the transaction.
+    // For this to be transactionally safe, reads must use `transaction.get()`.
+    // Let's assume for now this is called from a context where this is safe.
+    // A better approach would be to pass the transaction object to this helper.
+    const productSnapshotDocs = (await transaction.get(productsQuery)).docs;
     
-    if (productSnapshot.empty) {
+    if (productSnapshotDocs.length === 0) {
         console.warn(`Produto "${productName}" não encontrado no estoque. Venda registrada sem atualização de estoque.`);
         return;
     }
     
-    const productDoc = productSnapshot.docs[0];
+    const productDoc = productSnapshotDocs[0];
     const productRef = productDoc.ref;
     const currentQuantity = productDoc.data().quantity || 0;
     

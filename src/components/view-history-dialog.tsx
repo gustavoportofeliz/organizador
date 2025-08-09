@@ -133,7 +133,7 @@ function CancelInstallmentButton({ onCancel }: { onCancel: () => void }) {
                 <AlertDialogHeader>
                 <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
                 <AlertDialogDescription>
-                    Esta ação não pode ser desfeita. A parcela será permanentemente removida e o valor total da compra será ajustado.
+                    Esta ação não pode ser desfeita. A parcela será permanentemente removida e o valor total da compra será ajustado. Se a parcela já foi paga, o pagamento associado também será removido (estorno).
                 </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -221,14 +221,10 @@ export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 <div className="flex gap-2 justify-center">
-                                                    {inst.status !== 'paid' ? (
-                                                        <>
-                                                           <PayInstallmentButton onPay={(method) => handlePay(purchase.id, inst.id, method)} />
-                                                           <CancelInstallmentButton onCancel={() => handleCancel(purchase.id, inst.id)} />
-                                                        </>
-                                                    ) : (
-                                                        <span className="text-sm font-semibold text-green-600">Quitado</span>
+                                                    {inst.status !== 'paid' && (
+                                                        <PayInstallmentButton onPay={(method) => handlePay(purchase.id, inst.id, method)} />
                                                     )}
+                                                    <CancelInstallmentButton onCancel={() => handleCancel(purchase.id, inst.id)} />
                                                 </div>
                                             </TableCell>
                                         </TableRow>
@@ -244,5 +240,3 @@ export function ViewHistoryDialog({ open, onOpenChange, client, onPayInstallment
     </Dialog>
   );
 }
-
-    

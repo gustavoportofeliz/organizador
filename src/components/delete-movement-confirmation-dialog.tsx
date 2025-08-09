@@ -41,9 +41,11 @@ export function DeleteMovementConfirmationDialog({
     onOpenChange(false);
   };
 
-  const description = movementInfo?.type === 'sale' 
-    ? `Isso irá reverter a venda, devolvendo ${movementInfo.quantity} unidade(s) ao estoque e excluindo a compra do histórico do cliente ${movementInfo.clientName || ''}.`
-    : `Isso irá reverter a compra, removendo ${movementInfo.quantity} unidade(s) do estoque.`;
+  const description = movementInfo
+    ? movementInfo.type === 'sale'
+      ? `Isso irá reverter a venda, devolvendo ${movementInfo.quantity} unidade(s) ao estoque e excluindo a compra do histórico do cliente ${movementInfo.clientName || ''}.`
+      : `Isso irá reverter a compra, removendo ${movementInfo.quantity} unidade(s) do estoque.`
+    : '';
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>

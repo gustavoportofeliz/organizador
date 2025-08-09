@@ -88,9 +88,9 @@ export function AddTransactionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Adicionar Compra para {client.name}</DialogTitle>
+          <DialogTitle>Adicionar Venda para {client.name}</DialogTitle>
           <DialogDescription>
-            Registre um novo produto comprado por este cliente.
+            Registre um novo produto vendido para este cliente.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -102,7 +102,7 @@ export function AddTransactionDialog({
                   name="item"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Descrição da Compra</FormLabel>
+                      <FormLabel>Descrição da Venda</FormLabel>
                        <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl>
                                 <SelectTrigger>
@@ -234,7 +234,7 @@ export function AddTransactionDialog({
             </ScrollArea>
             <DialogFooter className="pt-4 mt-4 border-t">
               <Button type="submit" className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
-                Registrar Compra
+                Registrar Venda
               </Button>
             </DialogFooter>
           </form>

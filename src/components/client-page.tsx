@@ -350,7 +350,7 @@ export function ClientPage() {
                                 <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => openTransactionDialog(client)}>
                                     <Plus className="mr-2 h-4 w-4" />
-                                    <span>Adicionar Compra</span>
+                                    <span>Adicionar Venda</span>
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => openHistoryDialog(client)}>
                                     <History className="mr-2 h-4 w-4" />

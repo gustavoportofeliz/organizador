@@ -13,7 +13,6 @@ import {
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { ProductHistoryEntry } from '@/lib/types';
-import { format } from 'path';
 
 const formatDate = (dateString: string) => {
     if (!dateString) return '-';
@@ -52,10 +51,12 @@ export function DeleteMovementConfirmationDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
-          <AlertDialogDescription>
-            <p>Você está prestes a cancelar a movimentação de <span className="font-bold">{movementInfo?.type === 'sale' ? 'Venda' : 'Compra'}</span> de <span className="font-bold">{movementInfo?.quantity}</span> unidade(s) do dia <span className="font-bold">{movementInfo ? formatDate(movementInfo.date) : ''}</span>.</p>
-            <p className="mt-2">{description}</p>
-            <p className="font-bold mt-2">Essa ação não pode ser desfeita.</p>
+          <AlertDialogDescription asChild>
+            <div>
+              <p>Você está prestes a cancelar a movimentação de <span className="font-bold">{movementInfo?.type === 'sale' ? 'Venda' : 'Compra'}</span> de <span className="font-bold">{movementInfo?.quantity}</span> unidade(s) do dia <span className="font-bold">{movementInfo ? formatDate(movementInfo.date) : ''}</span>.</p>
+              <p className="mt-2">{description}</p>
+              <p className="font-bold mt-2">Essa ação não pode ser desfeita.</p>
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

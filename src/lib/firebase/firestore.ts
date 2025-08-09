@@ -231,16 +231,17 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
         const purchaseId = purchaseRef.id;
         
         const totalValue = data.quantity * data.unitPrice;
-        const installmentsCount = data.splitPurchase && data.installments ? data.installments : 1;
-        const installmentValue = parseFloat((totalValue / installmentsCount).toFixed(2));
-        const intervalDays = data.installmentInterval || 30;
+        
+        // Since the form is simplified, we always create a single installment.
+        const installmentsCount = 1;
+        const installmentValue = totalValue;
+        const intervalDays = 30;
 
         const newPurchase: Omit<Purchase, 'id'> = {
             clientId: clientId,
             item: data.item,
             quantity: data.quantity,
             totalValue: totalValue,
-            paymentMethod: data.paymentMethod,
             date: new Date().toISOString(),
             installments: Array.from({ length: installmentsCount }, (_, i) => ({
                 id: crypto.randomUUID(),
@@ -248,7 +249,6 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
                 value: installmentValue,
                 dueDate: addDays(new Date(), i * intervalDays).toISOString(),
                 status: 'pending',
-                paymentMethod: i === 0 ? data.paymentMethod : undefined, // Assign method to first installment if not split
             }))
         };
         transaction.set(purchaseRef, { ...newPurchase, id: purchaseId });

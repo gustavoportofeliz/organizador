@@ -22,7 +22,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { PlusCircle, MinusCircle } from 'lucide-react';
+import { PlusCircle, HandCoins } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { Client } from '@/lib/types';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -57,7 +57,7 @@ export function AddDebtPaymentDialog({ open, onOpenChange, onAddDebtPayment, cli
     resolver: zodResolver(formSchema),
     defaultValues: {
       clientId: selectedClient?.id || '',
-      type: 'debt',
+      type: selectedClient?.balance && selectedClient.balance > 0 ? 'payment' : 'debt',
       value: 0,
       description: '',
       paymentMethod: 'Não selecionado'
@@ -70,15 +70,20 @@ export function AddDebtPaymentDialog({ open, onOpenChange, onAddDebtPayment, cli
   React.useEffect(() => {
     if (selectedClient) {
         setValue('clientId', selectedClient.id)
+        // If client has a balance, default to payment, otherwise default to debt
+        setValue('type', selectedClient.balance && selectedClient.balance > 0 ? 'payment' : 'debt');
+    } else {
+        setValue('type', 'debt');
     }
-     // Reset form when dialog opens or client changes, but keep client ID if selected
+
     form.reset({
         clientId: selectedClient?.id || '',
-        type: 'debt',
+        type: selectedClient?.balance && selectedClient.balance > 0 ? 'payment' : 'debt',
         value: 0,
         description: '',
         paymentMethod: 'Não selecionado'
     });
+
   }, [open, selectedClient, form, setValue]);
 
 
@@ -149,7 +154,7 @@ export function AddDebtPaymentDialog({ open, onOpenChange, onAddDebtPayment, cli
                        <FormItem>
                          <RadioGroupItem value="payment" id="payment" className="peer sr-only" />
                          <Label htmlFor="payment" className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary">
-                            <MinusCircle className="mb-3 h-6 w-6"/>
+                            <HandCoins className="mb-3 h-6 w-6"/>
                             Registrar Pagamento
                         </Label>
                       </FormItem>
@@ -227,3 +232,5 @@ export function AddDebtPaymentDialog({ open, onOpenChange, onAddDebtPayment, cli
     </Dialog>
   );
 }
+
+    

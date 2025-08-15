@@ -25,6 +25,7 @@ import { AddTransactionDialog, type AddTransactionFormValues } from '@/component
 import { ViewHistoryDialog } from '@/components/view-history-dialog';
 import { EditClientDialog, type EditClientFormValues } from '@/components/edit-client-dialog';
 import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog';
+import { AddDebtPaymentDialog, type AddDebtPaymentFormValues } from '@/components/add-debt-payment-dialog';
 import {
   DollarSign,
   Users,
@@ -35,7 +36,8 @@ import {
   Trash2,
   Edit,
   Search,
-  Loader2
+  Loader2,
+  HandCoins
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -50,6 +52,8 @@ import {
   payInstallment as payInstallmentInDb,
   cancelInstallment as cancelInstallmentInDb,
   getProducts,
+  addPaymentToDebt,
+  addDebt,
 } from '@/lib/firebase/firestore';
 
 
@@ -73,6 +77,7 @@ export function ClientPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAddClientOpen, setAddClientOpen] = useState(false);
   const [isAddTransactionOpen, setAddTransactionOpen] = useState(false);
+  const [isAddDebtPaymentOpen, setAddDebtPaymentOpen] = useState(false);
   const [isViewHistoryOpen, setViewHistoryOpen] = useState(false);
   const [isEditClientOpen, setEditClientOpen] = useState(false);
   const [isDeleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -196,7 +201,28 @@ export function ClientPage() {
     }
   };
 
-  
+  const handleAddDebtPayment = async (data: AddDebtPaymentFormValues) => {
+    if (!data.clientId) {
+        toast({ variant: "destructive", title: "Erro", description: "Nenhum cliente selecionado."});
+        return;
+    }
+
+    try {
+        if (data.type === 'debt') {
+            await addDebt(data.clientId, data.value, data.description);
+            toast({ title: 'Sucesso!', description: 'Nova dívida adicionada.', className: 'bg-accent text-accent-foreground' });
+        } else {
+            await addPaymentToDebt(data.clientId, data.value, data.paymentMethod);
+            toast({ title: 'Sucesso!', description: 'Pagamento registrado.', className: 'bg-accent text-accent-foreground' });
+        }
+        fetchAllData();
+        setAddDebtPaymentOpen(false);
+    } catch(error) {
+         console.error("Error adding debt/payment:", error);
+         toast({ variant: "destructive", title: "Erro!", description: "Não foi possível registrar a operação." });
+    }
+  };
+
   const handlePayInstallment = async (clientId: string, purchaseId: string, installmentId: string, paymentMethod: Installment['paymentMethod']) => {
     try {
       await payInstallmentInDb(clientId, purchaseId, installmentId, paymentMethod);
@@ -230,6 +256,11 @@ export function ClientPage() {
   const openTransactionDialog = (client: Client) => {
     setSelectedClient(client);
     setAddTransactionOpen(true);
+  };
+  
+  const openDebtPaymentDialog = (client: Client) => {
+    setSelectedClient(client);
+    setAddDebtPaymentOpen(true);
   };
 
   const openHistoryDialog = (client: Client) => {
@@ -351,6 +382,10 @@ export function ClientPage() {
                                     <Plus className="mr-2 h-4 w-4" />
                                     <span>Adicionar Venda</span>
                                 </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => openDebtPaymentDialog(client)}>
+                                    <HandCoins className="mr-2 h-4 w-4" />
+                                    <span>Registrar Pagamento</span>
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => openHistoryDialog(client)}>
                                     <History className="mr-2 h-4 w-4" />
                                     <span>Ver Histórico</span>
@@ -397,6 +432,13 @@ export function ClientPage() {
         client={selectedClient}
         products={products}
       />
+      <AddDebtPaymentDialog
+        open={isAddDebtPaymentOpen}
+        onOpenChange={setAddDebtPaymentOpen}
+        onAddDebtPayment={handleAddDebtPayment}
+        clients={clients}
+        selectedClient={selectedClient}
+      />
        <ViewHistoryDialog
         open={isViewHistoryOpen}
         onOpenChange={setViewHistoryOpen}
@@ -419,3 +461,5 @@ export function ClientPage() {
     </div>
   );
 }
+
+    

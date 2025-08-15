@@ -51,6 +51,9 @@ export type Client = {
   purchases: Purchase[];
   payments: Payment[];
   relatives: Relative[];
+  totalPurchases?: number;
+  totalPayments?: number;
+  balance?: number;
 };
 
 export type ProductHistoryEntry = {
@@ -72,3 +75,5 @@ export type Product = {
     history: ProductHistoryEntry[];
     createdAt: string;
 }
+
+    

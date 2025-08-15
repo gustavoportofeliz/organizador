@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import type { Client } from '@/lib/types';
+import type { Client, Product } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { getClients, getClientTotals, addDebt, addPaymentToDebt } from '@/lib/firebase/firestore';
+import { getClients, getClientTotals, addDebt, addPaymentToDebt, getProducts } from '@/lib/firebase/firestore';
 import { AddDebtPaymentDialog, type AddDebtPaymentFormValues } from '@/components/add-debt-payment-dialog';
 
 const formatCurrency = (amount: number) => {
@@ -33,6 +33,7 @@ const formatCurrency = (amount: number) => {
 
 export function DebtPage() {
   const [clients, setClients] = useState<Client[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddDebtPaymentOpen, setAddDebtPaymentOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -43,8 +44,9 @@ export function DebtPage() {
   const fetchAllData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const clientsData = await getClients();
+      const [clientsData, productsData] = await Promise.all([getClients(), getProducts()]);
       setClients(clientsData);
+      setProducts(productsData);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({ variant: "destructive", title: "Erro ao buscar dados", description: "Não foi possível carregar as informações do banco de dados." });
@@ -65,9 +67,17 @@ export function DebtPage() {
 
     try {
         if (data.type === 'debt') {
-            await addDebt(data.clientId, data.value, data.description);
+            if (!data.productName || !data.quantity || !data.unitPrice) {
+                toast({ variant: "destructive", title: "Erro", description: "Detalhes do produto são necessários para adicionar uma dívida."});
+                return;
+            }
+            await addDebt(data.clientId, data.productName, data.quantity, data.unitPrice);
             toast({ title: 'Sucesso!', description: 'Nova dívida adicionada.', className: 'bg-accent text-accent-foreground' });
         } else {
+            if (!data.value || !data.paymentMethod) {
+              toast({ variant: "destructive", title: "Erro", description: "Valor e forma de pagamento são necessários."});
+              return;
+            }
             await addPaymentToDebt(data.clientId, data.value, data.paymentMethod);
             toast({ title: 'Sucesso!', description: 'Pagamento registrado.', className: 'bg-accent text-accent-foreground' });
         }
@@ -180,6 +190,7 @@ export function DebtPage() {
         onOpenChange={setAddDebtPaymentOpen}
         onAddDebtPayment={handleAddDebtPayment}
         clients={clients}
+        products={products}
         selectedClient={selectedClient}
       />
     </div>

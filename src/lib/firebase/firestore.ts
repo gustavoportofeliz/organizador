@@ -569,25 +569,40 @@ export const cancelProductHistoryEntry = async (productId: string, historyEntryI
 
 // ====== Debt & Payment Functions for Running Balance ======
 
-export const addDebt = async (clientId: string, value: number, description?: string) => {
-    const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
-    const purchaseRef = doc(collection(db, purchasePath));
+export const addDebt = async (clientId: string, productName: string, quantity: number, unitPrice: number) => {
+    await runTransaction(db, async (transaction) => {
+        const clientRef = doc(clientsCollection(), clientId);
+        const clientSnap = await transaction.get(clientRef);
+        if (!clientSnap.exists()) {
+            throw new Error("Client not found");
+        }
+        const clientName = clientSnap.data().name;
 
-    const newPurchase: Omit<Purchase, 'id'> = {
-        clientId: clientId,
-        item: description || 'Dívida adicionada',
-        quantity: 1,
-        totalValue: value,
-        date: new Date().toISOString(),
-        installments: [{ // Create a single, simple installment representing the debt
-            id: crypto.randomUUID(),
-            installmentNumber: 1,
-            value: value,
-            dueDate: new Date().toISOString(),
-            status: 'pending',
-        }]
-    };
-    await setDoc(purchaseRef, { ...newPurchase, id: purchaseRef.id });
+        const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
+        const purchaseRef = doc(collection(db, purchasePath));
+        const purchaseId = purchaseRef.id;
+
+        const totalValue = quantity * unitPrice;
+
+        const newPurchase: Omit<Purchase, 'id'> = {
+            clientId: clientId,
+            item: productName,
+            quantity: quantity,
+            totalValue: totalValue,
+            date: new Date().toISOString(),
+            installments: [{ // Create a single, simple installment representing the debt
+                id: crypto.randomUUID(),
+                installmentNumber: 1,
+                value: totalValue,
+                dueDate: new Date().toISOString(), // Or some other logic
+                status: 'pending',
+            }]
+        };
+        transaction.set(purchaseRef, { ...newPurchase, id: purchaseId });
+
+        // Link to stock
+        await updateProductStock(productName, quantity, clientName, unitPrice, clientId, transaction, purchaseId);
+    });
 };
 
 export const addPaymentToDebt = async (clientId: string, amount: number, paymentMethod: Payment['paymentMethod']) => {

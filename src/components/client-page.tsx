@@ -189,7 +189,7 @@ export function ClientPage() {
   
     try {
       await addTransaction(selectedClient.id, data);
-      toast({ title: 'Sucesso!', description: 'Nova compra registrada.', className: 'bg-accent text-accent-foreground' });
+      toast({ title: 'Sucesso!', description: 'Nova venda registrada.', className: 'bg-accent text-accent-foreground' });
       fetchAllData();
       if(selectedClient){
         const updatedClient = await getClient(selectedClient.id);
@@ -197,7 +197,7 @@ export function ClientPage() {
       }
     } catch (error) {
       console.error("Error adding transaction:", error);
-      toast({ variant: "destructive", title: "Erro!", description: "Não foi possível registrar a compra." });
+      toast({ variant: "destructive", title: "Erro!", description: "Não foi possível registrar a venda." });
     }
   };
 
@@ -209,9 +209,17 @@ export function ClientPage() {
 
     try {
         if (data.type === 'debt') {
-            await addDebt(data.clientId, data.value, data.description);
+            if (!data.productName || !data.quantity || !data.unitPrice) {
+                toast({ variant: "destructive", title: "Erro", description: "Detalhes do produto são necessários para adicionar uma dívida."});
+                return;
+            }
+            await addDebt(data.clientId, data.productName, data.quantity, data.unitPrice);
             toast({ title: 'Sucesso!', description: 'Nova dívida adicionada.', className: 'bg-accent text-accent-foreground' });
         } else {
+            if (!data.value || !data.paymentMethod) {
+                toast({ variant: "destructive", title: "Erro", description: "Valor e forma de pagamento são necessários."});
+                return;
+            }
             await addPaymentToDebt(data.clientId, data.value, data.paymentMethod);
             toast({ title: 'Sucesso!', description: 'Pagamento registrado.', className: 'bg-accent text-accent-foreground' });
         }
@@ -437,6 +445,7 @@ export function ClientPage() {
         onOpenChange={setAddDebtPaymentOpen}
         onAddDebtPayment={handleAddDebtPayment}
         clients={clients}
+        products={products}
         selectedClient={selectedClient}
       />
        <ViewHistoryDialog
@@ -461,5 +470,3 @@ export function ClientPage() {
     </div>
   );
 }
-
-    

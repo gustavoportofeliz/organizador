@@ -439,14 +439,14 @@ export const addProduct = async (data: AddProductFormValues) => {
 
 export const updateProductStock = async (productName: string, quantitySold: number, clientName: string, unitPrice: number, clientId: string, transaction: any, purchaseId: string) => {
     const productsQuery = query(productsCollection(), where("name", "==", productName));
-    const productSnapshot = await getDocs(productsQuery); // This should be a transactional get if called inside a transaction
+    const productSnapshot = (await getDocs(productsQuery)).docs; // This should be a transactional get if called inside a transaction
     
-    if (productSnapshot.empty) {
+    if (productSnapshot.length === 0) {
         console.warn(`Produto "${productName}" não encontrado no estoque. Venda registrada sem atualização de estoque.`);
         return;
     }
     
-    const productDoc = productSnapshot.docs[0];
+    const productDoc = productSnapshot[0];
     const productRef = productDoc.ref;
     const currentQuantity = productDoc.data().quantity || 0;
     
@@ -565,4 +565,41 @@ export const cancelProductHistoryEntry = async (productId: string, historyEntryI
         // 3. Delete the history entry itself
         transaction.delete(historyRef);
     });
+};
+
+// ====== Debt & Payment Functions for Running Balance ======
+
+export const addDebt = async (clientId: string, value: number, description?: string) => {
+    const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
+    const purchaseRef = doc(collection(db, purchasePath));
+
+    const newPurchase: Omit<Purchase, 'id'> = {
+        clientId: clientId,
+        item: description || 'Dívida adicionada',
+        quantity: 1,
+        totalValue: value,
+        date: new Date().toISOString(),
+        installments: [{ // Create a single, simple installment representing the debt
+            id: crypto.randomUUID(),
+            installmentNumber: 1,
+            value: value,
+            dueDate: new Date().toISOString(),
+            status: 'pending',
+        }]
+    };
+    await setDoc(purchaseRef, { ...newPurchase, id: purchaseRef.id });
+};
+
+export const addPaymentToDebt = async (clientId: string, amount: number, paymentMethod: Payment['paymentMethod']) => {
+    const paymentPath = `${getScopedPath()}/clients/${clientId}/payments`;
+    const paymentRef = doc(collection(db, paymentPath));
+
+    const newPayment: Omit<Payment, 'id'> = {
+        clientId: clientId,
+        amount: amount,
+        date: new Date().toISOString(),
+        purchaseId: 'pagamento_de_divida', // Special ID to indicate it's a general payment
+        paymentMethod: paymentMethod,
+    };
+    await setDoc(paymentRef, { ...newPayment, id: paymentRef.id });
 };

@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Users, Calendar, Archive, DollarSign, PanelLeft, Home, HelpCircle, FileText } from 'lucide-react';
+import { Users, Calendar, Archive, DollarSign, PanelLeft, Home, HelpCircle, FileText, ClipboardList } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -48,6 +48,10 @@ export function MainLayout({
                     <FileText />
                     <span>Dívidas</span>
                 </Link>
+                <Link href="/pedidos" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+                    <ClipboardList />
+                    <span>Pedidos</span>
+                </Link>
                 <Link href="/ajuda" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
                   <HelpCircle />
                   <span>Ajuda</span>
@@ -91,6 +95,10 @@ export function MainLayout({
                 <Link href="/dividas" className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
                     <FileText className="h-5 w-5" />
                     Dívidas
+                </Link>
+                 <Link href="/pedidos" className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
+                    <ClipboardList className="h-5 w-5" />
+                    Pedidos
                 </Link>
                 <Link href="/ajuda" className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
                     <HelpCircle className="h-5 w-5" />

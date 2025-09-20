@@ -76,4 +76,12 @@ export type Product = {
     createdAt: string;
 }
 
+export type Order = {
+    id: string;
+    customerName: string;
+    productName: string;
+    createdAt: string;
+    status: 'pending' | 'completed';
+}
+
     

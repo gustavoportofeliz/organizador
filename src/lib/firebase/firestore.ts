@@ -13,13 +13,14 @@ import {
   where,
   setDoc,
 } from 'firebase/firestore';
-import type { Client, Product, Purchase, Payment, Relative, ProductHistoryEntry, Installment } from '../types';
+import type { Client, Product, Purchase, Payment, Relative, ProductHistoryEntry, Installment, Order } from '../types';
 import type { AddClientFormValues } from '@/components/add-client-dialog';
 import type { EditClientFormValues } from '@/components/edit-client-dialog';
 import type { AddTransactionFormValues } from '@/components/add-transaction-dialog';
 import type { AddProductFormValues } from '@/components/add-product-dialog';
 import type { EditProductFormValues } from '@/components/edit-product-dialog';
 import type { AddRelativeFormValues } from '@/components/add-relative-dialog';
+import type { AddOrderFormValues } from '@/components/add-order-dialog';
 import { addDays } from 'date-fns';
 
 const DATA_ROOT_PATH = 'data/v1';
@@ -34,6 +35,7 @@ const getScopedPath = () => {
 // References that point to a single data root for the static user
 const clientsCollection = () => collection(db, `${getScopedPath()}/clients`);
 const productsCollection = () => collection(db, `${getScopedPath()}/products`);
+const ordersCollection = () => collection(db, `${getScopedPath()}/orders`);
 
 
 // Helper to get all subcollections for a client
@@ -617,4 +619,31 @@ export const addPaymentToDebt = async (clientId: string, amount: number, payment
         paymentMethod: paymentMethod,
     };
     await setDoc(paymentRef, { ...newPayment, id: paymentRef.id });
+};
+
+// ====== Order Functions ======
+
+export const getOrders = async (): Promise<Order[]> => {
+    const q = query(ordersCollection(), where("status", "==", "pending"));
+    const snapshot = await getDocs(q);
+    const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+    return orders.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+};
+
+export const addOrder = async (data: AddOrderFormValues) => {
+    const orderRef = doc(ordersCollection());
+    const newOrder: Omit<Order, 'id'> = {
+        ...data,
+        createdAt: new Date().toISOString(),
+        status: 'pending',
+    };
+    await setDoc(orderRef, { ...newOrder, id: orderRef.id });
+};
+
+export const completeOrder = async (orderId: string) => {
+    const orderRef = doc(ordersCollection(), orderId);
+    // We change the status to 'completed' instead of deleting
+    // This allows for a potential future "completed orders" history page.
+    // The getOrders() function only fetches 'pending' ones, so it will disappear from the main list.
+    await updateDoc(orderRef, { status: 'completed' });
 };

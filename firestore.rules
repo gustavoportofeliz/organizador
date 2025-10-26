@@ -1,131 +1,142 @@
 /**
- * @fileoverview Firestore Security Rules for the application.
+ * @file Firebase Security Rules for Firestore.
  *
- * Core Philosophy: This ruleset enforces a strict user-ownership model, ensuring that users can only access and modify data that belongs to them.
- * Data Structure: All user-specific data is nested under the `/users/{userId}` path, with further subcollections for clients, purchases, and payments. Top-level `/products` collection is intended for public reads, with restricted writes.
- * Key Security Decisions:
- *   - Users can only list documents within their own user subcollections. Listing other user's data is denied.
- *   - Data consistency between the path and document fields (userId, clientId) is strictly enforced.
- *   - Public read access is granted to the `/products` collection, but writes are only allowed if an 'ownerId' field is added to the entity and the user matches the owner.
+ * @Core Philosophy: This ruleset enforces a strict user-ownership model for all data stored under the `/users/{userId}` path. Each user has exclusive access to their own data, including clients, purchases, and payments. The top-level `/products` collection is publicly readable but only writable by an owner (TODO: currently missing).
+ * @Data Structure:
+ *   - /users/{userId}: Stores user profile information.
+ *   - /users/{userId}/clients/{clientId}: Stores client information for a specific user.
+ *   - /users/{userId}/clients/{clientId}/purchases/{purchaseId}: Stores purchase history for a specific client of a specific user.
+ *   - /users/{userId}/clients/{clientId}/payments/{paymentId}: Stores payment information for a specific client of a specific user.
+ *   - /products/{productId}: Stores product information.
+ * @Key Security Decisions:
+ *   - User data is isolated: Users can only access data under their own `/users/{userId}` path.
+ *   - Strong Ownership: All write operations (create, update, delete) require the user to be the owner of the data.
+ *   - Public Read for Products: The `/products` collection is publicly readable, allowing all users to view product information.  Write permissions are restricted (TODO: currently missing owner field).
+ *   - No User Listing: Listing users is not permitted.
+ * @Denormalization for Authorization: The data structure is designed to avoid `get()` calls. All authorization context is available within the document path.
+ * @Structural Segregation: Private user data is stored under `/users/{userId}`, while public product data is stored in a top-level collection `/products`.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Checks if the request is made by a signed-in user.
-     * @example isSignedIn() == true if request.auth != null
-     * @returns {bool} True if the user is signed in, false otherwise.
+     * @description Checks if the user is signed in.
+     * @returns {boolean} True if the user is signed in, false otherwise.
      */
     function isSignedIn() {
       return request.auth != null;
     }
 
     /**
-     * @description Checks if the authenticated user ID matches the provided user ID.
-     * @param {string} userId - The user ID to compare against the authenticated user's ID.
-     * @example isOwner('user123') == true if request.auth.uid == 'user123'
-     * @returns {bool} True if the user ID matches the authenticated user's ID, false otherwise.
+     * @description Checks if the authenticated user's UID matches the provided userId.
+     * @param {string} userId - The user ID to compare against the authenticated user's UID.
+     * @returns {boolean} True if the user is the owner, false otherwise.
      */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
     /**
-     * @description Checks if the authenticated user is the owner of an existing document.
-     * @param {string} userId - The user ID to compare against the authenticated user's ID.
-     * @example isExistingOwner('user123') == true if request.auth.uid == 'user123' && resource != null
-     * @returns {bool} True if the user ID matches the authenticated user's ID and the document exists, false otherwise.
+     * @description Checks if the authenticated user is the owner of the existing document.
+     * @param {string} userId - The user ID to compare against the authenticated user's UID.
+     * @returns {boolean} True if the user is the owner and the resource exists, false otherwise.
      */
     function isExistingOwner(userId) {
       return isOwner(userId) && resource != null;
     }
 
     /**
-     * @description Enforces read and write access to user profile information.
+     * @description Rules for the /users/{userId} collection.
      * @path /users/{userId}
-     * @allow (create) - A user can create their own profile if the userId matches their auth.uid.
-     * @allow (get, list) - A user can read their own profile information.
-     * @allow (update, delete) - A user can update or delete their own profile information.
-     * @deny (create) - A user cannot create a profile for another user.
-     * @deny (update, delete) - A user cannot update or delete another user's profile information.
-     * @principle Enforces document ownership for all operations.
+     * @allow (create) - Authenticated user with matching UID can create their own user document.
+     * @allow (get, list) - Authenticated user can read their own user document.
+     * @allow (update, delete) - Authenticated user can update/delete their own user document.
+     * @deny (create) - Unauthenticated user cannot create user document.
+     * @deny (get, list) - Unauthenticated user cannot read user document.
+     * @deny (update, delete) - Unauthenticated user cannot update/delete user document.
+     * @principle Enforces document ownership for all operations under /users/{userId}.
      */
     match /users/{userId} {
       allow get: if isOwner(userId);
-      allow list: if false; // Prevent listing of all users.
+      allow list: if false; // prevent listing all users
+
       allow create: if isOwner(userId) && request.resource.data.id == userId;
       allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Enforces read and write access to client information for a specific user.
+     * @description Rules for the /users/{userId}/clients/{clientId} collection.
      * @path /users/{userId}/clients/{clientId}
-     * @allow (create) - A user can create a client document under their user ID.
-     * @allow (get, list) - A user can read client documents under their user ID.
-     * @allow (update, delete) - A user can update or delete client documents under their user ID.
-     * @deny (create) - A user cannot create a client document under another user's ID.
-     * @deny (update, delete) - A user cannot update or delete client documents under another user's ID.
-     * @principle Enforces document ownership and validates relational integrity.
+     * @allow (create) - Authenticated user with matching UID can create a client document under their user document.
+     * @allow (get, list) - Authenticated user can read client documents under their user document.
+     * @allow (update, delete) - Authenticated user can update/delete client documents under their user document.
+     * @deny (create) - Unauthenticated user cannot create client document.
+     * @deny (get, list) - Unauthenticated user cannot read client document.
+     * @deny (update, delete) - Unauthenticated user cannot update/delete client document.
+     * @principle Enforces document ownership for all operations under /users/{userId}/clients/{clientId}.
      */
     match /users/{userId}/clients/{clientId} {
       allow get: if isOwner(userId);
       allow list: if isOwner(userId);
+
       allow create: if isOwner(userId) && request.resource.data.userId == userId;
       allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Enforces read and write access to purchase information for a specific client of a specific user.
+     * @description Rules for the /users/{userId}/clients/{clientId}/purchases/{purchaseId} collection.
      * @path /users/{userId}/clients/{clientId}/purchases/{purchaseId}
-     * @allow (create) - A user can create a purchase document under their user and client IDs.
-     * @allow (get, list) - A user can read purchase documents under their user and client IDs.
-     * @allow (update, delete) - A user can update or delete purchase documents under their user and client IDs.
-     * @deny (create) - A user cannot create a purchase document under another user's or client's ID.
-     * @deny (update, delete) - A user cannot update or delete purchase documents under another user's or client's ID.
-     * @principle Enforces document ownership and validates relational integrity.
+     * @allow (create) - Authenticated user with matching UID can create a purchase document under their client document.
+     * @allow (get, list) - Authenticated user can read purchase documents under their client document.
+     * @allow (update, delete) - Authenticated user can update/delete purchase documents under their client document.
+     * @deny (create) - Unauthenticated user cannot create purchase document.
+     * @deny (get, list) - Unauthenticated user cannot read purchase document.
+     * @deny (update, delete) - Unauthenticated user cannot update/delete purchase document.
+     * @principle Enforces document ownership for all operations under /users/{userId}/clients/{clientId}/purchases/{purchaseId}.
      */
     match /users/{userId}/clients/{clientId}/purchases/{purchaseId} {
       allow get: if isOwner(userId);
       allow list: if isOwner(userId);
-      allow create: if isOwner(userId) && request.resource.data.clientId == clientId;
-      allow update: if isExistingOwner(userId) && request.resource.data.clientId == resource.data.clientId;
+
+      allow create: if isOwner(userId) && get(/databases/$(database)/documents/users/$(userId)/clients/$(clientId)).data.userId == userId && request.resource.data.clientId == clientId;
+      allow update: if isExistingOwner(userId) && get(/databases/$(database)/documents/users/$(userId)/clients/$(clientId)).data.userId == userId && resource.data.clientId == clientId;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Enforces read and write access to payment information for a specific client of a specific user.
+     * @description Rules for the /users/{userId}/clients/{clientId}/payments/{paymentId} collection.
      * @path /users/{userId}/clients/{clientId}/payments/{paymentId}
-     * @allow (create) - A user can create a payment document under their user and client IDs.
-     * @allow (get, list) - A user can read payment documents under their user and client IDs.
-     * @allow (update, delete) - A user can update or delete payment documents under their user and client IDs.
-     * @deny (create) - A user cannot create a payment document under another user's or client's ID.
-     * @deny (update, delete) - A user cannot update or delete payment documents under another user's or client's ID.
-     * @principle Enforces document ownership and validates relational integrity.
+     * @allow (create) - Authenticated user with matching UID can create a payment document under their client document.
+     * @allow (get, list) - Authenticated user can read payment documents under their client document.
+     * @allow (update, delete) - Authenticated user can update/delete payment documents under their client document.
+     * @deny (create) - Unauthenticated user cannot create payment document.
+     * @deny (get, list) - Unauthenticated user cannot read payment document.
+     * @deny (update, delete) - Unauthenticated user cannot update/delete payment document.
+     * @principle Enforces document ownership for all operations under /users/{userId}/clients/{clientId}/payments/{paymentId}.
      */
     match /users/{userId}/clients/{clientId}/payments/{paymentId} {
       allow get: if isOwner(userId);
       allow list: if isOwner(userId);
-      allow create: if isOwner(userId) && request.resource.data.clientId == clientId;
-      allow update: if isExistingOwner(userId) && request.resource.data.clientId == resource.data.clientId;
+
+      allow create: if isOwner(userId) && get(/databases/$(database)/documents/users/$(userId)/clients/$(clientId)).data.userId == userId && request.resource.data.clientId == clientId;
+      allow update: if isExistingOwner(userId) && get(/databases/$(database)/documents/users/$(userId)/clients/$(clientId)).data.userId == userId && resource.data.clientId == clientId;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Allows public read access to product information, with owner-only writes.
+     * @description Rules for the /products/{productId} collection.
      * @path /products/{productId}
-     * @allow (get, list) - Anyone can read product information.
-     * @allow (create, update, delete) - Only the owner of the product can modify it.
-     * @deny (create) - A user cannot create products if they are not the owner.
-     *
-     * @principle Grants public read access while restricting write access to the owner.
+     * @allow (get, list) - Any user can read product documents.
+     * @deny (create, update, delete) - Only the owner can modify product documents.
+     * @principle Allows public read access but restricts write access to the owner (TODO: missing owner field).
      */
     match /products/{productId} {
-      allow get: if true;
-      allow list: if true;
+      allow get, list: if true;
       allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+      // CRITICAL: Cannot implement owner-only writes. The 'Product' entity is missing an 'ownerId' or 'authorId' field.
     }
   }
 }

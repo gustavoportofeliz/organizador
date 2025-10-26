@@ -1,4 +1,3 @@
-
 import { db, auth } from './firebase'; 
 import {
   collection,
@@ -14,7 +13,6 @@ import {
   where,
   setDoc,
   Transaction,
-  getDocsFromCache,
 } from 'firebase/firestore';
 import type { Client, Product, Purchase, Payment, Relative, ProductHistoryEntry, Installment, Order } from '../types';
 import type { AddClientFormValues } from '@/components/add-client-dialog';
@@ -25,8 +23,6 @@ import type { EditProductFormValues } from '@/components/edit-product-dialog';
 import type { AddRelativeFormValues } from '@/components/add-relative-dialog';
 import type { AddOrderFormValues } from '@/components/add-order-dialog';
 import { addDays } from 'date-fns';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 
 const getScopedPath = () => {
   const currentUser = auth.currentUser;
@@ -51,18 +47,9 @@ const getClientSubcollections = async (clientId: string) => {
     const relativesRef = collection(db, `${path}/clients/${clientId}/relatives`);
 
     const [purchasesSnap, paymentsSnap, relativesSnap] = await Promise.all([
-        getDocs(purchasesRef).catch(error => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: purchasesRef.path, operation: 'list'}));
-            throw error;
-        }),
-        getDocs(paymentsRef).catch(error => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: paymentsRef.path, operation: 'list'}));
-            throw error;
-        }),
-        getDocs(relativesRef).catch(error => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: relativesRef.path, operation: 'list'}));
-            throw error;
-        }),
+        getDocs(purchasesRef),
+        getDocs(paymentsRef),
+        getDocs(relativesRef),
     ]);
 
     const purchases: Purchase[] = await Promise.all(purchasesSnap.docs.map(async (pDoc) => {
@@ -86,14 +73,11 @@ const getClientSubcollections = async (clientId: string) => {
 // ====== Client Functions ======
 
 export const getClients = async (): Promise<Client[]> => {
-  const snapshot = await getDocs(clientsCollection()).catch(error => {
-    errorEmitter.emit('permission-error', new FirestorePermissionError({ path: getScopedPath() + '/clients', operation: 'list'}));
-    throw error;
-  });
+  const snapshot = await getDocs(clientsCollection());
   const clients: Client[] = await Promise.all(snapshot.docs.map(async (doc) => {
-    const clientData = { id: doc.id, ...doc.data() } as Omit<Client, 'purchases' | 'payments' | 'relatives'>;
+    const clientData = { id: doc.id, ...doc.data() } as Omit<Client, 'purchases' | 'payments' | 'relatives' | 'totalPurchases' | 'totalPayments' | 'balance'>;
     const { purchases, payments, relatives } = await getClientSubcollections(doc.id);
-    const client: Client = { ...clientData, purchases, payments, relatives };
+    const client: Client = { ...clientData, purchases, payments, relatives, totalPurchases: 0, totalPayments: 0, balance: 0 };
 
     // Calculate derived values on the client-side for display if needed
     const { totalPurchases, totalPayments, balance } = getClientTotals(client);
@@ -111,20 +95,17 @@ export const getClientTotals = (client: Client) => {
 
 export const getClient = async (id: string): Promise<Client> => {
     const clientDocRef = doc(clientsCollection(), id);
-    const clientDoc = await getDoc(clientDocRef).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: clientDocRef.path, operation: 'get'}));
-        throw error;
-    });
+    const clientDoc = await getDoc(clientDocRef);
     if (!clientDoc.exists()) {
         throw new Error("Client not found");
     }
-     const clientData = { id: clientDoc.id, ...clientDoc.data() } as Omit<Client, 'purchases' | 'payments' | 'relatives'>;
+    const clientData = { id: clientDoc.id, ...clientDoc.data() } as Omit<Client, 'purchases' | 'payments' | 'relatives' | 'totalPurchases' | 'totalPayments' | 'balance'>;
     const { purchases, payments, relatives } = await getClientSubcollections(id);
-    return { ...clientData, purchases, payments, relatives };
+    return { ...clientData, purchases, payments, relatives, totalPurchases: 0, totalPayments: 0, balance: 0 };
 };
 
 export const addClient = async (data: AddClientFormValues) => {
-  runTransaction(db, async (transaction) => {
+  await runTransaction(db, async (transaction) => {
     const clientRef = doc(clientsCollection());
     const clientId = clientRef.id;
     
@@ -197,18 +178,12 @@ export const addClient = async (data: AddClientFormValues) => {
       transaction.set(purchaseRef, { ...newPurchase, id: purchaseId });
       await updateProductStock(data.purchaseItem, 1, data.name, data.purchaseValue, clientId, transaction, purchaseId);
     }
-  }).catch(error => {
-    errorEmitter.emit('permission-error', new FirestorePermissionError({ path: getScopedPath() + '/clients', operation: 'create', requestResourceData: data }));
-    throw error;
   });
 };
 
 export const editClient = async (id: string, data: EditClientFormValues) => {
   const clientRef = doc(clientsCollection(), id);
-  await updateDoc(clientRef, data as { [x: string]: any }).catch(error => {
-    errorEmitter.emit('permission-error', new FirestorePermissionError({ path: clientRef.path, operation: 'update', requestResourceData: data }));
-    throw error;
-  });
+  await updateDoc(clientRef, data as { [x: string]: any });
 };
 
 export const deleteClient = async (id: string) => {
@@ -231,14 +206,11 @@ export const deleteClient = async (id: string) => {
     });
 
     batch.delete(clientRef);
-    await batch.commit().catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: clientRef.path, operation: 'delete' }));
-        throw error;
-    });
+    await batch.commit();
 };
 
 export const addTransaction = async (clientId: string, data: AddTransactionFormValues) => {
-    runTransaction(db, async (transaction) => {
+    await runTransaction(db, async (transaction) => {
         const clientRef = doc(clientsCollection(), clientId);
         const clientSnap = await transaction.get(clientRef);
         if (!clientSnap.exists()) {
@@ -268,9 +240,6 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
         transaction.set(purchaseRef, { ...newPurchase, id: purchaseId });
 
         await updateProductStock(data.item, data.quantity, clientName, data.unitPrice, clientId, transaction, purchaseId);
-    }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `${getScopedPath()}/clients/${clientId}/purchases`, operation: 'create', requestResourceData: data }));
-        throw error;
     });
 };
 
@@ -278,7 +247,7 @@ export const payInstallment = async (clientId: string, purchaseId: string, insta
     const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
     const purchaseRef = doc(db, purchasePath, purchaseId);
     
-    runTransaction(db, async (transaction) => {
+    await runTransaction(db, async (transaction) => {
         const purchaseSnap = await transaction.get(purchaseRef);
         if (!purchaseSnap.exists()) throw new Error("Purchase not found");
         
@@ -310,9 +279,6 @@ export const payInstallment = async (clientId: string, purchaseId: string, insta
             const paymentRef = doc(collection(db, paymentPath));
             transaction.set(paymentRef, { ...paymentData, id: paymentRef.id });
         }
-    }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: purchaseRef.path, operation: 'update' }));
-        throw error;
     });
 };
 
@@ -320,7 +286,7 @@ export const cancelInstallment = async (clientId: string, purchaseId: string, in
     const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
     const purchaseRef = doc(db, purchasePath, purchaseId);
 
-    runTransaction(db, async (transaction) => {
+    await runTransaction(db, async (transaction) => {
         const purchaseSnap = await transaction.get(purchaseRef);
         if (!purchaseSnap.exists()) throw new Error("Purchase not found");
 
@@ -336,7 +302,7 @@ export const cancelInstallment = async (clientId: string, purchaseId: string, in
                 collection(db, `${getScopedPath()}/clients/${clientId}/payments`),
                 where("installmentId", "==", installmentId)
             );
-            const paymentSnap = await getDocsFromCache(paymentQuery);
+            const paymentSnap = await getDocs(paymentQuery);
             paymentSnap.forEach(paymentDoc => {
                 transaction.delete(paymentDoc.ref);
             });
@@ -356,7 +322,7 @@ export const cancelInstallment = async (clientId: string, purchaseId: string, in
             await restoreProductStock(purchase.item, purchase.quantity, purchase.id, transaction);
 
             const initialPaymentQuery = query(collection(db, `${getScopedPath()}/clients/${clientId}/payments`), where("purchaseId", "==", purchaseId));
-            const initialPaymentSnap = await getDocsFromCache(initialPaymentQuery);
+            const initialPaymentSnap = await getDocs(initialPaymentQuery);
             initialPaymentSnap.forEach(paymentDoc => {
                 if (!paymentDoc.data().installmentId) {
                     transaction.delete(paymentDoc.ref);
@@ -369,18 +335,12 @@ export const cancelInstallment = async (clientId: string, purchaseId: string, in
                 totalValue: newTotalValue
             });
         }
-    }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: purchaseRef.path, operation: 'update' }));
-        throw error;
     });
 };
 
 export const addRelative = async (clientId: string, data: AddRelativeFormValues) => {
     const clientRef = doc(clientsCollection(), clientId);
-    const clientSnap = await getDoc(clientRef).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: clientRef.path, operation: 'get' }));
-        throw error;
-    });
+    const clientSnap = await getDoc(clientRef);
     if (!clientSnap.exists()) throw new Error("Client not found");
 
     const relativePath = `${getScopedPath()}/clients/${clientId}/relatives`;
@@ -391,19 +351,13 @@ export const addRelative = async (clientId: string, data: AddRelativeFormValues)
         clientName: clientSnap.data().name,
         ...data,
     };
-    await setDoc(relativeRef, relativeData).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: relativeRef.path, operation: 'create', requestResourceData: relativeData }));
-        throw error;
-    });
+    await setDoc(relativeRef, relativeData);
 };
 
 // ====== Product Functions ======
 
 export const getProducts = async (): Promise<Product[]> => {
-    const snapshot = await getDocs(productsCollection()).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: getScopedPath() + '/products', operation: 'list'}));
-        throw error;
-    });
+    const snapshot = await getDocs(productsCollection());
     const products: Product[] = await Promise.all(snapshot.docs.map(async (doc) => {
         const productData = { id: doc.id, ...doc.data() } as Omit<Product, 'history'>;
         const historyPath = `${getScopedPath()}/products/${doc.id}/history`;
@@ -419,7 +373,7 @@ export const getProducts = async (): Promise<Product[]> => {
 export const addProduct = async (data: AddProductFormValues) => {
     const { name, quantity, unitPrice, type } = data;
     
-    runTransaction(db, async (transaction) => {
+    await runTransaction(db, async (transaction) => {
         const q = query(productsCollection(), where("name", "==", name));
         const querySnapshot = await getDocs(q);
         let productRef;
@@ -459,9 +413,6 @@ export const addProduct = async (data: AddProductFormValues) => {
             notes: type === 'purchase' ? 'Compra de estoque' : 'Venda manual',
         };
         transaction.set(historyRef, { ...newHistoryEntry, id: historyRef.id });
-    }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: getScopedPath() + '/products', operation: 'write', requestResourceData: data }));
-        throw error;
     });
 };
 
@@ -513,7 +464,7 @@ export const restoreProductStock = async (productName: string, quantityToRestore
     transaction.update(productRef, { quantity: newQuantity });
 
     const historyQuery = query(collection(db, `${getScopedPath()}/products/${productRef.id}/history`), where("purchaseId", "==", purchaseId));
-    const historySnapshot = await getDocsFromCache(historyQuery);
+    const historySnapshot = await getDocs(historyQuery);
     
     historySnapshot.forEach(docToDelete => {
         transaction.delete(docToDelete.ref);
@@ -522,10 +473,7 @@ export const restoreProductStock = async (productName: string, quantityToRestore
 
 export const editProduct = async (id: string, data: EditProductFormValues) => {
     const productRef = doc(productsCollection(), id);
-    await updateDoc(productRef, { name: data.name }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: productRef.path, operation: 'update', requestResourceData: data }));
-        throw error;
-    });
+    await updateDoc(productRef, { name: data.name });
 };
 
 export const deleteProduct = async (id: string) => {
@@ -540,14 +488,11 @@ export const deleteProduct = async (id: string) => {
     });
 
     batch.delete(productRef);
-    await batch.commit().catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: productRef.path, operation: 'delete' }));
-        throw error;
-    });
+    await batch.commit();
 };
 
 export const cancelProductHistoryEntry = async (productId: string, historyEntryId: string) => {
-    runTransaction(db, async (transaction) => {
+    await runTransaction(db, async (transaction) => {
         const productRef = doc(productsCollection(), productId);
         const historyRef = doc(db, `${getScopedPath()}/products/${productId}/history`, historyEntryId);
 
@@ -587,16 +532,13 @@ export const cancelProductHistoryEntry = async (productId: string, historyEntryI
         }
         
         transaction.delete(historyRef);
-    }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `${getScopedPath()}/products/${productId}`, operation: 'write' }));
-        throw error;
     });
 };
 
 // ====== Debt & Payment Functions for Running Balance ======
 
 export const addDebt = async (clientId: string, productName: string, quantity: number, unitPrice: number) => {
-    runTransaction(db, async (transaction) => {
+    await runTransaction(db, async (transaction) => {
         const clientRef = doc(clientsCollection(), clientId);
         const clientSnap = await transaction.get(clientRef);
         if (!clientSnap.exists()) {
@@ -627,9 +569,6 @@ export const addDebt = async (clientId: string, productName: string, quantity: n
         transaction.set(purchaseRef, { ...newPurchase, id: purchaseId });
 
         await updateProductStock(productName, quantity, clientName, unitPrice, clientId, transaction, purchaseId);
-    }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `${getScopedPath()}/clients/${clientId}/purchases`, operation: 'create', requestResourceData: { productName, quantity, unitPrice} }));
-        throw error;
     });
 };
 
@@ -644,20 +583,14 @@ export const addPaymentToDebt = async (clientId: string, amount: number, payment
         purchaseId: 'pagamento_de_divida',
         paymentMethod: paymentMethod,
     };
-    await setDoc(paymentRef, { ...newPayment, id: paymentRef.id }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: paymentRef.path, operation: 'create', requestResourceData: newPayment }));
-        throw error;
-    });
+    await setDoc(paymentRef, { ...newPayment, id: paymentRef.id });
 };
 
 // ====== Order Functions ======
 
 export const getOrders = async (): Promise<Order[]> => {
     const q = query(ordersCollection(), where("status", "==", "pending"));
-    const snapshot = await getDocs(q).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: getScopedPath() + '/orders', operation: 'list'}));
-        throw error;
-    });
+    const snapshot = await getDocs(q);
     const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
     return orders.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 };
@@ -669,16 +602,10 @@ export const addOrder = async (data: AddOrderFormValues) => {
         createdAt: new Date().toISOString(),
         status: 'pending',
     };
-    await setDoc(orderRef, { ...newOrder, id: orderRef.id }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: orderRef.path, operation: 'create', requestResourceData: newOrder }));
-        throw error;
-    });
+    await setDoc(orderRef, { ...newOrder, id: orderRef.id });
 };
 
 export const completeOrder = async (orderId: string) => {
     const orderRef = doc(ordersCollection(), orderId);
-    await updateDoc(orderRef, { status: 'completed' }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: orderRef.path, operation: 'update', requestResourceData: { status: 'completed' } }));
-        throw error;
-    });
+    await updateDoc(orderRef, { status: 'completed' });
 };

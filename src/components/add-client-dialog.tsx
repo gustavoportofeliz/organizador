@@ -28,7 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { Product } from '@/lib/types';
 import React from 'react';
 import { ScrollArea } from './ui/scroll-area';
-import { format, parse } from 'date-fns';
+import { format } from 'date-fns';
 
 const formSchema = z.object({
   name: z.string().min(2, { message: 'Nome deve ter pelo menos 2 caracteres.' }),

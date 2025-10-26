@@ -41,7 +41,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { addDays, format, parseISO } from 'date-fns';
+import { parseISO } from 'date-fns';
 import { 
   addClient, 
   addTransaction, 
@@ -120,7 +120,6 @@ export function ClientPage() {
       setProducts(productsData);
     } catch (error) {
       console.error("Error fetching data:", error);
-      toast({ variant: "destructive", title: "Erro ao buscar dados", description: "Não foi possível carregar as informações. Tente recarregar a página." });
     } finally {
       setIsLoading(false);
     }
@@ -151,7 +150,6 @@ export function ClientPage() {
       fetchAllData();
     } catch (error) {
       console.error("Error adding client:", error);
-      // Error is now handled globally, no need for a specific toast here
     }
   };
   
@@ -163,7 +161,6 @@ export function ClientPage() {
       fetchAllData();
     } catch (error) {
        console.error("Error editing client:", error);
-       // Error is now handled globally
     }
   };
 
@@ -175,7 +172,6 @@ export function ClientPage() {
       fetchAllData();
     } catch (error) {
        console.error("Error deleting client:", error);
-       // Error is now handled globally
     }
   };
 
@@ -202,7 +198,6 @@ export function ClientPage() {
       }
     } catch (error) {
       console.error("Error adding transaction:", error);
-      // Error is now handled globally
     }
   };
 
@@ -237,7 +232,6 @@ export function ClientPage() {
         setAddDebtPaymentOpen(false);
     } catch(error) {
          console.error("Error adding debt/payment:", error);
-         // Error is now handled globally
     }
   };
 
@@ -252,7 +246,6 @@ export function ClientPage() {
       }
     } catch(error) {
       console.error("Error paying installment:", error);
-      // Error is now handled globally
     }
   };
 
@@ -267,7 +260,6 @@ export function ClientPage() {
       }
     } catch (error) {
       console.error("Error canceling installment:", error);
-      // Error is now handled globally
     }
   };
 

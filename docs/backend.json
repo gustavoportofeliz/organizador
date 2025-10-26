@@ -1,0 +1,279 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the application. Stores basic user information, excluding authentication data.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the user.",
+          "format": "email"
+        }
+      },
+      "required": [
+        "id",
+        "email"
+      ]
+    },
+    "Client": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Client",
+      "type": "object",
+      "description": "Represents a client with their personal and contact information.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the client."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N Client)"
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Full name of the client."
+        },
+        "birthDate": {
+          "type": "string",
+          "description": "Date of birth of the client.",
+          "format": "date-time"
+        },
+        "address": {
+          "type": "string",
+          "description": "Address of the client."
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "Phone number of the client."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about the client."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "fullName"
+      ]
+    },
+    "Product": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Product",
+      "type": "object",
+      "description": "Represents a product that can be purchased by clients.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the product."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the product."
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the product."
+        },
+        "price": {
+          "type": "number",
+          "description": "Price of the product."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "price"
+      ]
+    },
+    "Purchase": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Purchase",
+      "type": "object",
+      "description": "Represents a purchase made by a client, linking the client to a specific product.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the purchase."
+        },
+        "clientId": {
+          "type": "string",
+          "description": "Reference to Client. (Relationship: Client 1:N Purchase)"
+        },
+        "productId": {
+          "type": "string",
+          "description": "Reference to Product. (Relationship: Product 1:N Purchase)"
+        },
+        "purchaseDate": {
+          "type": "string",
+          "description": "Date and time of the purchase.",
+          "format": "date-time"
+        },
+        "quantity": {
+          "type": "number",
+          "description": "Quantity of the product purchased."
+        },
+        "price": {
+          "type": "number",
+          "description": "The amount the client paid"
+        }
+      },
+      "required": [
+        "id",
+        "clientId",
+        "productId",
+        "purchaseDate",
+        "quantity",
+        "price"
+      ]
+    },
+    "Payment": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Payment",
+      "type": "object",
+      "description": "Represents a payment made by a client.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the payment."
+        },
+        "clientId": {
+          "type": "string",
+          "description": "Reference to Client. (Relationship: Client 1:N Payment)"
+        },
+        "paymentDate": {
+          "type": "string",
+          "description": "Date and time of the payment.",
+          "format": "date-time"
+        },
+        "amount": {
+          "type": "number",
+          "description": "Amount of the payment."
+        }
+      },
+      "required": [
+        "id",
+        "clientId",
+        "paymentDate",
+        "amount"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profile information. This collection is primarily used for storing user metadata, as the actual user authentication is handled by Firebase Authentication. It's important to note that client data will reside in subcollections under each user document.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user, corresponding to the Firebase Authentication UID."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/clients/{clientId}",
+        "definition": {
+          "entityName": "Client",
+          "schema": {
+            "$ref": "#/backend/entities/Client"
+          },
+          "description": "Stores client information for a specific user.  The 'userId' parameter ensures data isolation and ownership. The 'userId' attribute is implicitly inherited for security rule evaluation.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user, corresponding to the Firebase Authentication UID."
+            },
+            {
+              "name": "clientId",
+              "description": "The unique identifier for the client."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/clients/{clientId}/purchases/{purchaseId}",
+        "definition": {
+          "entityName": "Purchase",
+          "schema": {
+            "$ref": "#/backend/entities/Purchase"
+          },
+          "description": "Stores purchase history for a specific client of a specific user. The 'userId' and 'clientId' parameters ensure data isolation and ownership. The 'userId' and 'clientId' attributes are implicitly inherited for security rule evaluation.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "clientId",
+              "description": "The unique identifier for the client."
+            },
+            {
+              "name": "purchaseId",
+              "description": "The unique identifier for the purchase."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/clients/{clientId}/payments/{paymentId}",
+        "definition": {
+          "entityName": "Payment",
+          "schema": {
+            "$ref": "#/backend/entities/Payment"
+          },
+          "description": "Stores payment information for a specific client of a specific user. The 'userId' and 'clientId' parameters ensure data isolation and ownership. The 'userId' and 'clientId' attributes are implicitly inherited for security rule evaluation.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier for the user."
+            },
+            {
+              "name": "clientId",
+              "description": "The unique identifier for the client."
+            },
+            {
+              "name": "paymentId",
+              "description": "The unique identifier for the payment."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/products/{productId}",
+        "definition": {
+          "entityName": "Product",
+          "schema": {
+            "$ref": "#/backend/entities/Product"
+          },
+          "description": "Stores product information that can be purchased by clients. Note that `Product` data will exist in a separate top-level collection.",
+          "params": [
+            {
+              "name": "productId",
+              "description": "The unique identifier for the product."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to ensure data isolation between users and to enable efficient querying and management of client information, purchases, and payments.  The core principle is Authorization Independence, achieved by structuring data around user-owned subcollections.  Each user has their own set of clients, and all data related to those clients (purchases, payments) resides within that user's subcollection. This eliminates the need for `get()` calls in security rules, as all authorization context is directly available within the document path.\n\n- **/users/{userId}/clients/{clientId}**: Stores client information.  The `userId` parameter ensures that each user can only access their own clients.\n- **/users/{userId}/clients/{clientId}/purchases/{purchaseId}**:  Stores purchase history for each client.  The `userId` parameter inherited from the parent path, coupled with the `clientId`, enforces ownership at the purchase level.\n- **/users/{userId}/clients/{clientId}/payments/{paymentId}**: Stores payment information for each client.  The `userId` and `clientId` parameters enforce ownership at the payment level.\n\nThis structure directly supports the required QAPs by:\n\n- **Secure List Operations**: The path-based ownership model allows secure `list` operations within a user's client collection and within each client's subcollections (purchases, payments).\n- **Authorization Independence**: Security rules can be written to only allow access to data within a user's `{userId}` path, without needing to `get()` data from other collections. All data for a user exists under their userId, and the user id is already available from `request.auth.uid`.\n- **No Custom Claims (DBAC)**:  User roles are not stored as custom claims. Access control relies solely on the authenticated user's ID and the hierarchical data structure."
+  }
+}

@@ -1,0 +1,127 @@
+/**
+ * @description This ruleset enforces a strict user-ownership model, where each user has exclusive access to their own data.
+ * All data related to a user (clients, purchases, payments) is nested under the /users/{userId} path.
+ * @dataStructure Data is organized hierarchically: /users/{userId}/clients/{clientId}/purchases/{purchaseId} and /users/{userId}/clients/{clientId}/payments/{paymentId}.
+ * @keySecurityDecisions
+ * - Users can only access their own data.
+ * - Listing of all users is not permitted.
+ * - Clients, purchases and payments are owned by the user and are stored in subcollections.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Enforces user-ownership for user profiles. Only the authenticated user can read or write their own profile.
+     * @path /users/{userId}
+     * @allow (create) - An authenticated user can create their profile if the userId matches their auth UID.
+     * @allow (get, list, update, delete) - An authenticated user can only access their own profile if the userId matches their auth UID.
+     * @deny (create) - An unauthenticated user cannot create any user profiles.
+     * @deny (update, delete) - An authenticated user cannot modify or delete another user's profile.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      allow get: if isSignedIn() && isOwner(userId);
+      allow list: if false;
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == request.auth.uid;
+      allow update: if isSignedIn() && isOwner(userId) && resource.data.id == resource.data.id;
+      allow delete: if isSignedIn() && isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description Enforces user-ownership for clients. Only the authenticated user can read or write their own clients.
+     * @path /users/{userId}/clients/{clientId}
+     * @allow (create) - An authenticated user can create a client under their own user ID.
+     * @allow (get, list, update, delete) - An authenticated user can only access their own clients.
+     * @deny (create) - An unauthenticated user cannot create any clients.
+     * @deny (update, delete) - An authenticated user cannot modify or delete another user's clients.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId}/clients/{clientId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      allow get: if isSignedIn() && isOwner(userId);
+      allow list: if isSignedIn() && isOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.userId == userId;
+      allow update: if isSignedIn() && isOwner(userId) && resource != null && resource.data.userId == userId;
+      allow delete: if isSignedIn() && isOwner(userId) && resource != null;
+    }
+
+     /**
+      * @description Enforces user-ownership for purchases. Only the authenticated user can read or write their own purchases for their clients.
+      * @path /users/{userId}/clients/{clientId}/purchases/{purchaseId}
+      * @allow (create) - An authenticated user can create a purchase under their own user ID and client ID.
+      * @allow (get, list, update, delete) - An authenticated user can only access their own purchases.
+      * @deny (create) - An unauthenticated user cannot create any purchases.
+      * @deny (update, delete) - An authenticated user cannot modify or delete another user's purchases.
+      * @principle Enforces document ownership for all operations.
+      */
+    match /users/{userId}/clients/{clientId}/purchases/{purchaseId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      allow get: if isSignedIn() && isOwner(userId);
+      allow list: if isSignedIn() && isOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.clientId == clientId;
+      allow update: if isSignedIn() && isOwner(userId) && resource != null && request.resource.data.clientId == clientId;
+      allow delete: if isSignedIn() && isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description Enforces user-ownership for payments. Only the authenticated user can read or write their own payments for their clients.
+     * @path /users/{userId}/clients/{clientId}/payments/{paymentId}
+     * @allow (create) - An authenticated user can create a payment under their own user ID and client ID.
+     * @allow (get, list, update, delete) - An authenticated user can only access their own payments.
+     * @deny (create) - An unauthenticated user cannot create any payments.
+     * @deny (update, delete) - An authenticated user cannot modify or delete another user's payments.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /users/{userId}/clients/{clientId}/payments/{paymentId} {
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      allow get: if isSignedIn() && isOwner(userId);
+      allow list: if isSignedIn() && isOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.clientId == clientId;
+      allow update: if isSignedIn() && isOwner(userId) && resource != null && request.resource.data.clientId == clientId;
+      allow delete: if isSignedIn() && isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description Allows public read access to products, but restricts write access.
+     * @path /products/{productId}
+     * @allow (get, list) - Any user (authenticated or unauthenticated) can read product information.
+     * @allow (create, update, delete) - No user can create, update, or delete products.
+     * @deny (create, update, delete) - All writes are denied since no ownership field is defined.
+     * @principle Allows public read access, but restricts write access.
+     */
+    match /products/{productId} {
+      allow get, list: if true;
+      allow create, update, delete: if false; // TODO: Add owner validation once the schema is updated with an ownership field.
+    }
+  }
+}

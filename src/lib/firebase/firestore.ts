@@ -50,9 +50,18 @@ const getClientSubcollections = async (clientId: string) => {
     const relativesRef = collection(db, `${path}/clients/${clientId}/relatives`);
 
     const [purchasesSnap, paymentsSnap, relativesSnap] = await Promise.all([
-        getDocs(purchasesRef),
-        getDocs(paymentsRef),
-        getDocs(relativesRef),
+        getDocs(purchasesRef).catch(error => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: purchasesRef.path, operation: 'list'}));
+            throw error;
+        }),
+        getDocs(paymentsRef).catch(error => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: paymentsRef.path, operation: 'list'}));
+            throw error;
+        }),
+        getDocs(relativesRef).catch(error => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: relativesRef.path, operation: 'list'}));
+            throw error;
+        }),
     ]);
 
     const purchases: Purchase[] = await Promise.all(purchasesSnap.docs.map(async (pDoc) => {
@@ -670,5 +679,7 @@ export const completeOrder = async (orderId: string) => {
     });
 };
 
+
+    
 
     

@@ -58,7 +58,7 @@ export function BirthdayPage() {
             fetchClients();
         } catch (error) {
             console.error("Error adding relative:", error);
-            toast({ variant: "destructive", title: "Erro!", description: "Não foi possível adicionar o parente." });
+            // Error is handled globally
         }
     };
     

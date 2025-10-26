@@ -151,7 +151,7 @@ export function ClientPage() {
       fetchAllData();
     } catch (error) {
       console.error("Error adding client:", error);
-      toast({ variant: "destructive", title: "Erro!", description: "Não foi possível adicionar o cliente." });
+      // Error is now handled globally, no need for a specific toast here
     }
   };
   
@@ -163,7 +163,7 @@ export function ClientPage() {
       fetchAllData();
     } catch (error) {
        console.error("Error editing client:", error);
-       toast({ variant: "destructive", title: "Erro!", description: "Não foi possível atualizar o cliente." });
+       // Error is now handled globally
     }
   };
 
@@ -175,7 +175,7 @@ export function ClientPage() {
       fetchAllData();
     } catch (error) {
        console.error("Error deleting client:", error);
-       toast({ variant: "destructive", title: "Erro!", description: "Não foi possível remover o cliente." });
+       // Error is now handled globally
     }
   };
 
@@ -183,11 +183,11 @@ export function ClientPage() {
     if (!selectedClient) return;
   
     const productInStock = products.find(p => p.name.toLowerCase() === data.item.toLowerCase());
-    if (!productInStock || productInStock.quantity < 1) {
+    if (!productInStock || productInStock.quantity < data.quantity) {
       toast({
         variant: "destructive",
         title: "Estoque insuficiente!",
-        description: `Não há estoque disponível para ${data.item}.`,
+        description: `Não há estoque suficiente para ${data.item}.`,
       });
       return;
     }
@@ -202,7 +202,7 @@ export function ClientPage() {
       }
     } catch (error) {
       console.error("Error adding transaction:", error);
-      toast({ variant: "destructive", title: "Erro!", description: "Não foi possível registrar a venda." });
+      // Error is now handled globally
     }
   };
 
@@ -218,6 +218,11 @@ export function ClientPage() {
                 toast({ variant: "destructive", title: "Erro", description: "Detalhes do produto são necessários para adicionar uma dívida."});
                 return;
             }
+            const productInStock = products.find(p => p.name.toLowerCase() === data.productName?.toLowerCase());
+            if (!productInStock || productInStock.quantity < data.quantity) {
+              toast({ variant: "destructive", title: "Estoque insuficiente!", description: `Não há estoque suficiente para ${data.productName}.` });
+              return;
+            }
             await addDebt(data.clientId, data.productName, data.quantity, data.unitPrice);
             toast({ title: 'Sucesso!', description: 'Nova dívida adicionada.', className: 'bg-accent text-accent-foreground' });
         } else {
@@ -232,7 +237,7 @@ export function ClientPage() {
         setAddDebtPaymentOpen(false);
     } catch(error) {
          console.error("Error adding debt/payment:", error);
-         toast({ variant: "destructive", title: "Erro!", description: "Não foi possível registrar a operação." });
+         // Error is now handled globally
     }
   };
 
@@ -247,7 +252,7 @@ export function ClientPage() {
       }
     } catch(error) {
       console.error("Error paying installment:", error);
-      toast({ variant: "destructive", title: "Erro!", description: "Não foi possível quitar a parcela." });
+      // Error is now handled globally
     }
   };
 
@@ -262,7 +267,7 @@ export function ClientPage() {
       }
     } catch (error) {
       console.error("Error canceling installment:", error);
-      toast({ variant: "destructive", title: "Erro!", description: "Não foi possível cancelar a parcela." });
+      // Error is now handled globally
     }
   };
 
@@ -397,7 +402,7 @@ export function ClientPage() {
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => openDebtPaymentDialog(client)}>
                                     <HandCoins className="mr-2 h-4 w-4" />
-                                    <span>Registrar Pagamento</span>
+                                    <span>Dívida/Pagamento</span>
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => openHistoryDialog(client)}>
                                     <History className="mr-2 h-4 w-4" />

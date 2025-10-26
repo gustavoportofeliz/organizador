@@ -76,6 +76,11 @@ export function DebtPage() {
                 toast({ variant: "destructive", title: "Erro", description: "Detalhes do produto são necessários para adicionar uma dívida."});
                 return;
             }
+            const productInStock = products.find(p => p.name.toLowerCase() === data.productName?.toLowerCase());
+            if (!productInStock || productInStock.quantity < data.quantity) {
+              toast({ variant: "destructive", title: "Estoque insuficiente!", description: `Não há estoque suficiente para ${data.productName}.` });
+              return;
+            }
             await addDebt(data.clientId, data.productName, data.quantity, data.unitPrice);
             toast({ title: 'Sucesso!', description: 'Nova dívida adicionada.', className: 'bg-accent text-accent-foreground' });
         } else {
@@ -90,7 +95,7 @@ export function DebtPage() {
         setAddDebtPaymentOpen(false);
     } catch(error) {
          console.error("Error adding debt/payment:", error);
-         toast({ variant: "destructive", title: "Erro!", description: "Não foi possível registrar a operação." });
+         // Error handled globally
     }
   };
 
@@ -110,7 +115,7 @@ export function DebtPage() {
                 (client.phone && client.phone.includes(search))
             );
     }).sort((a,b) => b.balance - a.balance);
-  }, [clients, searchTerm, isLoading, user]);
+  }, [clients, searchTerm, user]);
 
 
   if (isLoading) {

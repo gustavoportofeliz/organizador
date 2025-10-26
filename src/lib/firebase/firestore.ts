@@ -14,6 +14,7 @@ import {
   where,
   setDoc,
   Transaction,
+  getDocsFromCache,
 } from 'firebase/firestore';
 import type { Client, Product, Purchase, Payment, Relative, ProductHistoryEntry, Installment, Order } from '../types';
 import type { AddClientFormValues } from '@/components/add-client-dialog';
@@ -335,7 +336,7 @@ export const cancelInstallment = async (clientId: string, purchaseId: string, in
                 collection(db, `${getScopedPath()}/clients/${clientId}/payments`),
                 where("installmentId", "==", installmentId)
             );
-            const paymentSnap = await getDocs(paymentQuery);
+            const paymentSnap = await getDocsFromCache(paymentQuery);
             paymentSnap.forEach(paymentDoc => {
                 transaction.delete(paymentDoc.ref);
             });
@@ -355,7 +356,7 @@ export const cancelInstallment = async (clientId: string, purchaseId: string, in
             await restoreProductStock(purchase.item, purchase.quantity, purchase.id, transaction);
 
             const initialPaymentQuery = query(collection(db, `${getScopedPath()}/clients/${clientId}/payments`), where("purchaseId", "==", purchaseId));
-            const initialPaymentSnap = await getDocs(initialPaymentQuery);
+            const initialPaymentSnap = await getDocsFromCache(initialPaymentQuery);
             initialPaymentSnap.forEach(paymentDoc => {
                 if (!paymentDoc.data().installmentId) {
                     transaction.delete(paymentDoc.ref);
@@ -376,7 +377,10 @@ export const cancelInstallment = async (clientId: string, purchaseId: string, in
 
 export const addRelative = async (clientId: string, data: AddRelativeFormValues) => {
     const clientRef = doc(clientsCollection(), clientId);
-    const clientSnap = await getDoc(clientRef);
+    const clientSnap = await getDoc(clientRef).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: clientRef.path, operation: 'get' }));
+        throw error;
+    });
     if (!clientSnap.exists()) throw new Error("Client not found");
 
     const relativePath = `${getScopedPath()}/clients/${clientId}/relatives`;
@@ -509,7 +513,7 @@ export const restoreProductStock = async (productName: string, quantityToRestore
     transaction.update(productRef, { quantity: newQuantity });
 
     const historyQuery = query(collection(db, `${getScopedPath()}/products/${productRef.id}/history`), where("purchaseId", "==", purchaseId));
-    const historySnapshot = await getDocs(historyQuery);
+    const historySnapshot = await getDocsFromCache(historyQuery);
     
     historySnapshot.forEach(docToDelete => {
         transaction.delete(docToDelete.ref);
@@ -678,8 +682,3 @@ export const completeOrder = async (orderId: string) => {
         throw error;
     });
 };
-
-
-    
-
-    

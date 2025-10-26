@@ -68,7 +68,7 @@ export function OrdersPage() {
       fetchOrders();
     } catch (error) {
       console.error("Error adding order:", error);
-      toast({ variant: "destructive", title: "Erro!", description: "Não foi possível registrar o pedido." });
+      // Error is handled globally
     }
   };
 
@@ -79,7 +79,7 @@ export function OrdersPage() {
         fetchOrders();
     } catch (error) {
         console.error("Error completing order:", error);
-        toast({ variant: "destructive", title: "Erro!", description: "Não foi possível concluir o pedido." });
+        // Error is handled globally
     }
   }
 

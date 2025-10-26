@@ -94,13 +94,20 @@ export function InventoryPage() {
     }, [fetchProducts, user]);
 
     const handleAddProduct = async (data: AddProductFormValues) => {
-        const { name, type, isNewProduct } = data;
+        const { name, type, isNewProduct, quantity } = data;
         const existingProduct = products.find(p => p.name.toLowerCase() === name.toLowerCase());
 
-        if (type === 'sale' && (isNewProduct || !existingProduct)) {
-          toast({ variant: 'destructive', title: 'Erro!', description: 'Não é possível vender um produto que não existe no estoque.' });
-          return;
+        if (type === 'sale') {
+            if (isNewProduct || !existingProduct) {
+              toast({ variant: 'destructive', title: 'Erro!', description: 'Não é possível vender um produto que não existe no estoque.' });
+              return;
+            }
+            if (existingProduct.quantity < quantity) {
+                toast({ variant: 'destructive', title: 'Estoque insuficiente!', description: `A quantidade de venda (${quantity}) é maior que o estoque (${existingProduct.quantity}).` });
+                return;
+            }
         }
+
 
         try {
             await addProduct(data);
@@ -108,7 +115,7 @@ export function InventoryPage() {
             fetchProducts();
         } catch (error) {
             console.error("Error adding product transaction:", error);
-            toast({ variant: 'destructive', title: 'Erro!', description: 'Não foi possível registrar a movimentação.' });
+            // Error is handled globally
         }
       };
 
@@ -121,7 +128,7 @@ export function InventoryPage() {
             setEditProductOpen(false);
         } catch (error) {
             console.error("Error editing product:", error);
-            toast({ variant: 'destructive', title: 'Erro!', description: 'Não foi possível editar o produto.' });
+            // Error is handled globally
         }
     };
 
@@ -134,7 +141,7 @@ export function InventoryPage() {
             setDeleteConfirmOpen(false);
         } catch (error) {
             console.error("Error deleting product:", error);
-            toast({ variant: 'destructive', title: 'Erro!', description: 'Não foi possível remover o produto.' });
+            // Error is handled globally
         }
     };
 
@@ -147,7 +154,7 @@ export function InventoryPage() {
             setDeleteMovementConfirmOpen(false);
         } catch (error) {
             console.error("Error canceling movement:", error);
-            toast({ variant: 'destructive', title: 'Erro!', description: 'Não foi possível cancelar a movimentação.' });
+            // Error is handled globally
         }
     };
     

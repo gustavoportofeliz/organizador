@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { addProduct, getProducts, editProduct as editProductInDb, deleteProduct as deleteProductFromDb, cancelProductHistoryEntry } from '@/lib/firebase/firestore';
+import { useUser } from '@/firebase';
   
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -70,8 +71,10 @@ export function InventoryPage() {
     const [selectedMovement, setSelectedMovement] = useState<ProductHistoryEntry | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const { toast } = useToast();
+    const { user } = useUser();
 
     const fetchProducts = useCallback(async () => {
+        if (!user) return;
         setIsLoading(true);
         try {
             const productsData = await getProducts();
@@ -82,11 +85,13 @@ export function InventoryPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [toast]);
+    }, [toast, user]);
 
     useEffect(() => {
-        fetchProducts();
-    }, [fetchProducts]);
+        if (user) {
+            fetchProducts();
+        }
+    }, [fetchProducts, user]);
 
     const handleAddProduct = async (data: AddProductFormValues) => {
         const { name, type, isNewProduct } = data;

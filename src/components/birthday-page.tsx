@@ -12,6 +12,7 @@ import { AddRelativeDialog, type AddRelativeFormValues } from '@/components/add-
 import { Button } from './ui/button';
 import { getClients, addRelative } from '@/lib/firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { useUser } from '@/firebase';
 
 interface BirthdayPerson {
     id: string;
@@ -28,8 +29,10 @@ export function BirthdayPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [isAddRelativeOpen, setAddRelativeOpen] = useState(false);
     const { toast } = useToast();
+    const { user } = useUser();
 
     const fetchClients = useCallback(async () => {
+        if (!user) return;
         setIsLoading(true);
         try {
             const clientsData = await getClients();
@@ -40,11 +43,13 @@ export function BirthdayPage() {
         } finally {
             setIsLoading(false);
         }
-    }, [toast]);
+    }, [toast, user]);
     
     useEffect(() => {
-        fetchClients();
-    }, [fetchClients]);
+        if(user) {
+            fetchClients();
+        }
+    }, [fetchClients, user]);
 
     const handleAddRelative = async (data: AddRelativeFormValues) => {
         try {
@@ -90,7 +95,8 @@ export function BirthdayPage() {
         
         let date = parse(dateString, 'yyyy-MM-dd', new Date());
         if (isValid(date)) {
-            return date;
+            const tzoffset = (new Date()).getTimezoneOffset() * 60000;
+            return new Date(date.getTime() + tzoffset);
         }
 
         date = parse(dateString, 'dd/MM/yyyy', new Date());

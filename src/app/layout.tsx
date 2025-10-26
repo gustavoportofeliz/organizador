@@ -1,17 +1,23 @@
 
 import type { Metadata } from 'next';
 import './globals.css';
-import { Toaster } from "@/components/ui/toaster"; // Import Toaster
+import { Toaster } from "@/components/ui/toaster";
+import { FirebaseClientProvider } from '@/firebase';
 
 export const metadata: Metadata = {
   title: 'Organizador de Clientes',
   description: 'Gerencie seus clientes e finanças com facilidade.',
+  manifest: '/manifest.json',
+  icons: {
+    apple: '/icon.png',
+  },
+  themeColor: '#fff'
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: React.Node;
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
@@ -31,7 +37,9 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </head>
       <body className="font-body antialiased">
-        {children}
+        <FirebaseClientProvider>
+            {children}
+        </FirebaseClientProvider>
         <Toaster />
       </body>
     </html>

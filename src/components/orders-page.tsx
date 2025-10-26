@@ -21,6 +21,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { getOrders, addOrder, completeOrder } from '@/lib/firebase/firestore';
 import { AddOrderDialog, type AddOrderFormValues } from '@/components/add-order-dialog';
+import { useUser } from '@/firebase';
 
 const formatDate = (dateString: string) => {
     if (!dateString) return '-';
@@ -38,8 +39,10 @@ export function OrdersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAddOrderOpen, setAddOrderOpen] = useState(false);
   const { toast } = useToast();
+  const { user } = useUser();
 
   const fetchOrders = useCallback(async () => {
+    if(!user) return;
     setIsLoading(true);
     try {
       const ordersData = await getOrders();
@@ -50,11 +53,13 @@ export function OrdersPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, user]);
 
   useEffect(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+    if (user) {
+        fetchOrders();
+    }
+  }, [fetchOrders, user]);
 
   const handleAddOrder = async (data: AddOrderFormValues) => {
     try {

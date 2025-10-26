@@ -1,4 +1,4 @@
-import { db } from './firebase'; 
+import { db, auth } from './firebase'; 
 import {
   collection,
   getDocs,
@@ -23,13 +23,13 @@ import type { AddRelativeFormValues } from '@/components/add-relative-dialog';
 import type { AddOrderFormValues } from '@/components/add-order-dialog';
 import { addDays } from 'date-fns';
 
-const DATA_ROOT_PATH = 'data/v1';
-
 const getScopedPath = () => {
-  // Since auth is removed, we use a static path.
-  // In a real multi-user app, this would be replaced by the user's ID.
-  const staticUserId = 'shared_user';
-  return `${DATA_ROOT_PATH}/users/${staticUserId}`;
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("User not authenticated. Cannot access data.");
+  }
+  const userId = currentUser.uid;
+  return `users/${userId}`;
 };
 
 // References that point to a single data root for the static user
@@ -139,7 +139,7 @@ export const addClient = async (data: AddClientFormValues) => {
       }));
 
       // If there is an initial payment, apply it to the installments
-      if (data.paymentAmount && data.paymentAmount > 0) {
+      if (data.paymentAmount && data.paymentAmount > 0 && data.paymentMethod && data.paymentMethod !== 'Não selecionado') {
         let remainingPayment = data.paymentAmount;
         
         // Record the single payment transaction
@@ -234,22 +234,17 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
         
         const totalValue = data.quantity * data.unitPrice;
         
-        // Since the form is simplified, we always create a single installment.
-        const installmentsCount = 1;
-        const installmentValue = totalValue;
-        const intervalDays = 30;
-
         const newPurchase: Omit<Purchase, 'id'> = {
             clientId: clientId,
             item: data.item,
             quantity: data.quantity,
             totalValue: totalValue,
             date: new Date().toISOString(),
-            installments: Array.from({ length: installmentsCount }, (_, i) => ({
+            installments: Array.from({ length: 1 }, (_, i) => ({
                 id: crypto.randomUUID(),
                 installmentNumber: i + 1,
-                value: installmentValue,
-                dueDate: addDays(new Date(), i * intervalDays).toISOString(),
+                value: totalValue,
+                dueDate: addDays(new Date(), 30).toISOString(), // Default 30 days due date
                 status: 'pending',
             }))
         };

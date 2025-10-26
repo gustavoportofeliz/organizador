@@ -23,6 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { getClients, getClientTotals, addDebt, addPaymentToDebt, getProducts } from '@/lib/firebase/firestore';
 import { AddDebtPaymentDialog, type AddDebtPaymentFormValues } from '@/components/add-debt-payment-dialog';
+import { useUser } from '@/firebase';
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('pt-BR', {
@@ -40,8 +41,10 @@ export function DebtPage() {
   const [searchTerm, setSearchTerm] = useState('');
 
   const { toast } = useToast();
+  const { user } = useUser();
 
   const fetchAllData = useCallback(async () => {
+    if (!user) return;
     setIsLoading(true);
     try {
       const [clientsData, productsData] = await Promise.all([getClients(), getProducts()]);
@@ -53,11 +56,13 @@ export function DebtPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, user]);
 
   useEffect(() => {
-    fetchAllData();
-  }, [fetchAllData]);
+    if (user) {
+        fetchAllData();
+    }
+  }, [fetchAllData, user]);
 
   const handleAddDebtPayment = async (data: AddDebtPaymentFormValues) => {
     if (!data.clientId) {
@@ -74,7 +79,7 @@ export function DebtPage() {
             await addDebt(data.clientId, data.productName, data.quantity, data.unitPrice);
             toast({ title: 'Sucesso!', description: 'Nova dívida adicionada.', className: 'bg-accent text-accent-foreground' });
         } else {
-            if (!data.value || !data.paymentMethod) {
+            if (!data.value || !data.paymentMethod || data.paymentMethod === 'Não selecionado') {
               toast({ variant: "destructive", title: "Erro", description: "Valor e forma de pagamento são necessários."});
               return;
             }
@@ -95,7 +100,7 @@ export function DebtPage() {
   };
   
   const filteredClients = useMemo(() => {
-    if (isLoading) return [];
+    if (!user) return [];
     return clients
         .map(c => ({...c, ...getClientTotals(c)}))
         .filter(client => {
@@ -105,7 +110,7 @@ export function DebtPage() {
                 (client.phone && client.phone.includes(search))
             );
     }).sort((a,b) => b.balance - a.balance);
-  }, [clients, searchTerm, isLoading]);
+  }, [clients, searchTerm, isLoading, user]);
 
 
   if (isLoading) {

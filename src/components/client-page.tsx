@@ -55,6 +55,7 @@ import {
   addPaymentToDebt,
   addDebt,
 } from '@/lib/firebase/firestore';
+import { useUser } from '@/firebase';
 
 
 const formatCurrency = (amount: number) => {
@@ -85,6 +86,7 @@ export function ClientPage() {
   const [searchTerm, setSearchTerm] = useState('');
 
   const { toast } = useToast();
+  const { user } = useUser();
 
   const updateInstallmentStatuses = useCallback((clientsToUpdate: Client[]): Client[] => {
     const now = new Date();
@@ -109,6 +111,7 @@ export function ClientPage() {
   }, []);
 
   const fetchAllData = useCallback(async () => {
+    if (!user) return;
     setIsLoading(true);
     try {
       const [clientsData, productsData] = await Promise.all([getClients(), getProducts()]);
@@ -117,19 +120,21 @@ export function ClientPage() {
       setProducts(productsData);
     } catch (error) {
       console.error("Error fetching data:", error);
-      toast({ variant: "destructive", title: "Erro ao buscar dados", description: "Não foi possível carregar as informações do banco de dados." });
+      toast({ variant: "destructive", title: "Erro ao buscar dados", description: "Não foi possível carregar as informações. Tente recarregar a página." });
     } finally {
       setIsLoading(false);
     }
-  }, [toast, updateInstallmentStatuses]);
+  }, [toast, updateInstallmentStatuses, user]);
 
   useEffect(() => {
-    fetchAllData();
+    if (user) {
+      fetchAllData();
+    }
     const interval = setInterval(() => {
       setClients(prevClients => updateInstallmentStatuses(prevClients));
     }, 60000); // Check for overdue installments every minute
     return () => clearInterval(interval);
-  }, [fetchAllData, updateInstallmentStatuses]);
+  }, [fetchAllData, updateInstallmentStatuses, user]);
 
 
   const totalOutstandingBalance = useMemo(() => {
@@ -216,7 +221,7 @@ export function ClientPage() {
             await addDebt(data.clientId, data.productName, data.quantity, data.unitPrice);
             toast({ title: 'Sucesso!', description: 'Nova dívida adicionada.', className: 'bg-accent text-accent-foreground' });
         } else {
-            if (!data.value || !data.paymentMethod) {
+            if (!data.value || !data.paymentMethod || data.paymentMethod === 'Não selecionado') {
                 toast({ variant: "destructive", title: "Erro", description: "Valor e forma de pagamento são necessários."});
                 return;
             }
@@ -287,7 +292,7 @@ export function ClientPage() {
   };
 
   const filteredClients = useMemo(() => {
-    if (isLoading) return [];
+    if (!user) return [];
     return clients.filter(client => {
       const search = searchTerm.toLowerCase();
       return (
@@ -299,7 +304,7 @@ export function ClientPage() {
         (client.preferences && client.preferences.toLowerCase().includes(search))
       );
     });
-  }, [clients, searchTerm, isLoading]);
+  }, [clients, searchTerm, user]);
 
 
   return (

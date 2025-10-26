@@ -2,13 +2,16 @@
 
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Users, Calendar, Archive, DollarSign, PanelLeft, Home, HelpCircle, FileText, ClipboardList } from 'lucide-react';
+import { Users, Calendar, Archive, DollarSign, PanelLeft, Home, HelpCircle, FileText, ClipboardList, LogOut, Loader2 } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Button } from '@/components/ui/button';
+import { useAuth, useUser } from '@/firebase';
+import { useEffect } from 'react';
+import { signOut } from 'firebase/auth';
 
 export function MainLayout({
   children,
@@ -16,6 +19,31 @@ export function MainLayout({
   children: React.ReactNode;
 }>) {
   const router = useRouter();
+  const auth = useAuth();
+  const { user, isUserLoading } = useUser();
+
+  useEffect(() => {
+    if (!isUserLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, isUserLoading, router]);
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      router.push('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
+  if (isUserLoading || !user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-16 w-16 animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <>
@@ -56,6 +84,10 @@ export function MainLayout({
                   <HelpCircle />
                   <span>Ajuda</span>
                 </Link>
+                <Button variant="ghost" size="sm" onClick={handleLogout} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+                  <LogOut />
+                  <span>Sair</span>
+                </Button>
           </nav>
 
           {/* Mobile Navigation */}
@@ -104,6 +136,10 @@ export function MainLayout({
                     <HelpCircle className="h-5 w-5" />
                     Ajuda
                 </Link>
+                <Button variant="ghost" onClick={handleLogout} className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground justify-start">
+                  <LogOut className="h-5 w-5" />
+                  Sair
+                </Button>
               </nav>
             </SheetContent>
           </Sheet>

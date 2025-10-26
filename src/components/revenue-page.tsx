@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table';
 import { getClients } from '@/lib/firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { useUser } from '@/firebase';
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('pt-BR', {
@@ -36,8 +37,10 @@ export function RevenuePage() {
     const [clients, setClients] = useState<Client[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const { toast } = useToast();
+    const { user } = useUser();
 
     const fetchClients = useCallback(async () => {
+        if (!user) return;
         setIsLoading(true);
         try {
             const clientsData = await getClients();
@@ -48,11 +51,13 @@ export function RevenuePage() {
         } finally {
             setIsLoading(false);
         }
-    }, [toast]);
+    }, [toast, user]);
 
     useEffect(() => {
-        fetchClients();
-    }, [fetchClients]);
+        if (user) {
+            fetchClients();
+        }
+    }, [fetchClients, user]);
 
     const monthlyData = useMemo(() => {
         const data: { 

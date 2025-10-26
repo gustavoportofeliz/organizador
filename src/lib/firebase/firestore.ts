@@ -1,3 +1,4 @@
+
 import { db, auth } from './firebase'; 
 import {
   collection,
@@ -12,6 +13,7 @@ import {
   query,
   where,
   setDoc,
+  Transaction,
 } from 'firebase/firestore';
 import type { Client, Product, Purchase, Payment, Relative, ProductHistoryEntry, Installment, Order } from '../types';
 import type { AddClientFormValues } from '@/components/add-client-dialog';
@@ -22,6 +24,8 @@ import type { EditProductFormValues } from '@/components/edit-product-dialog';
 import type { AddRelativeFormValues } from '@/components/add-relative-dialog';
 import type { AddOrderFormValues } from '@/components/add-order-dialog';
 import { addDays } from 'date-fns';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 const getScopedPath = () => {
   const currentUser = auth.currentUser;
@@ -72,7 +76,10 @@ const getClientSubcollections = async (clientId: string) => {
 // ====== Client Functions ======
 
 export const getClients = async (): Promise<Client[]> => {
-  const snapshot = await getDocs(clientsCollection());
+  const snapshot = await getDocs(clientsCollection()).catch(error => {
+    errorEmitter.emit('permission-error', new FirestorePermissionError({ path: getScopedPath() + '/clients', operation: 'list'}));
+    throw error;
+  });
   const clients: Client[] = await Promise.all(snapshot.docs.map(async (doc) => {
     const clientData = { id: doc.id, ...doc.data() } as Omit<Client, 'purchases' | 'payments' | 'relatives'>;
     const { purchases, payments, relatives } = await getClientSubcollections(doc.id);
@@ -94,7 +101,10 @@ export const getClientTotals = (client: Client) => {
 
 export const getClient = async (id: string): Promise<Client> => {
     const clientDocRef = doc(clientsCollection(), id);
-    const clientDoc = await getDoc(clientDocRef);
+    const clientDoc = await getDoc(clientDocRef).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: clientDocRef.path, operation: 'get'}));
+        throw error;
+    });
     if (!clientDoc.exists()) {
         throw new Error("Client not found");
     }
@@ -104,12 +114,11 @@ export const getClient = async (id: string): Promise<Client> => {
 };
 
 export const addClient = async (data: AddClientFormValues) => {
-  await runTransaction(db, async (transaction) => {
+  runTransaction(db, async (transaction) => {
     const clientRef = doc(clientsCollection());
     const clientId = clientRef.id;
-
-    // 1. Create the client document
-    transaction.set(clientRef, {
+    
+    const clientData = {
       id: clientId,
       name: data.name,
       phone: data.phone || '',
@@ -118,9 +127,9 @@ export const addClient = async (data: AddClientFormValues) => {
       neighborhood: data.neighborhood || '',
       childrenInfo: data.childrenInfo || '',
       preferences: data.preferences || '',
-    });
+    };
+    transaction.set(clientRef, clientData);
 
-    // 2. Handle purchase and payment logic only if a purchase is made
     if (data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem) {
       const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
       const purchaseRef = doc(collection(db, purchasePath));
@@ -138,23 +147,21 @@ export const addClient = async (data: AddClientFormValues) => {
         status: 'pending',
       }));
 
-      // If there is an initial payment, apply it to the installments
       if (data.paymentAmount && data.paymentAmount > 0 && data.paymentMethod && data.paymentMethod !== 'Não selecionado') {
         let remainingPayment = data.paymentAmount;
         
-        // Record the single payment transaction
         const paymentPath = `${getScopedPath()}/clients/${clientId}/payments`;
         const paymentRef = doc(collection(db, paymentPath));
-        transaction.set(paymentRef, {
+        const paymentData = {
           id: paymentRef.id,
           clientId: clientId,
           amount: data.paymentAmount,
           date: new Date().toISOString(),
           purchaseId: purchaseId,
           paymentMethod: data.paymentMethod,
-        });
+        };
+        transaction.set(paymentRef, paymentData);
 
-        // Iterate over installments and mark as paid
         for (const installment of installments) {
           if (remainingPayment >= installment.value) {
             remainingPayment -= installment.value;
@@ -162,7 +169,6 @@ export const addClient = async (data: AddClientFormValues) => {
             installment.paidDate = new Date().toISOString();
             installment.paymentMethod = data.paymentMethod;
           } else {
-            // Partial payment logic could be added here if needed in the future
             break; 
           }
         }
@@ -171,7 +177,7 @@ export const addClient = async (data: AddClientFormValues) => {
       const newPurchase: Omit<Purchase, 'id'> = {
         clientId: clientId,
         item: data.purchaseItem,
-        quantity: 1, // Assuming quantity 1 when adding client
+        quantity: 1,
         totalValue: data.purchaseValue,
         date: new Date().toISOString(),
         paymentMethod: data.paymentMethod,
@@ -179,21 +185,20 @@ export const addClient = async (data: AddClientFormValues) => {
       };
 
       transaction.set(purchaseRef, { ...newPurchase, id: purchaseId });
-
-      // Update product stock after purchase
-      const clientName = data.name;
-      
-      await updateProductStock(data.purchaseItem, 1, clientName, data.purchaseValue, clientId, transaction, purchaseId);
-
+      await updateProductStock(data.purchaseItem, 1, data.name, data.purchaseValue, clientId, transaction, purchaseId);
     }
+  }).catch(error => {
+    errorEmitter.emit('permission-error', new FirestorePermissionError({ path: getScopedPath() + '/clients', operation: 'create', requestResourceData: data }));
+    throw error;
   });
 };
 
-
-
 export const editClient = async (id: string, data: EditClientFormValues) => {
   const clientRef = doc(clientsCollection(), id);
-  await updateDoc(clientRef, data as { [x: string]: any });
+  await updateDoc(clientRef, data as { [x: string]: any }).catch(error => {
+    errorEmitter.emit('permission-error', new FirestorePermissionError({ path: clientRef.path, operation: 'update', requestResourceData: data }));
+    throw error;
+  });
 };
 
 export const deleteClient = async (id: string) => {
@@ -216,13 +221,15 @@ export const deleteClient = async (id: string) => {
     });
 
     batch.delete(clientRef);
-    await batch.commit();
+    await batch.commit().catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: clientRef.path, operation: 'delete' }));
+        throw error;
+    });
 };
 
 export const addTransaction = async (clientId: string, data: AddTransactionFormValues) => {
-    const clientRef = doc(clientsCollection(), clientId);
-    
-    await runTransaction(db, async (transaction) => {
+    runTransaction(db, async (transaction) => {
+        const clientRef = doc(clientsCollection(), clientId);
         const clientSnap = await transaction.get(clientRef);
         if (!clientSnap.exists()) {
             throw new Error("Client not found");
@@ -244,22 +251,24 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
                 id: crypto.randomUUID(),
                 installmentNumber: i + 1,
                 value: totalValue,
-                dueDate: addDays(new Date(), 30).toISOString(), // Default 30 days due date
+                dueDate: addDays(new Date(), 30).toISOString(),
                 status: 'pending',
             }))
         };
         transaction.set(purchaseRef, { ...newPurchase, id: purchaseId });
 
         await updateProductStock(data.item, data.quantity, clientName, data.unitPrice, clientId, transaction, purchaseId);
+    }).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `${getScopedPath()}/clients/${clientId}/purchases`, operation: 'create', requestResourceData: data }));
+        throw error;
     });
 };
-
 
 export const payInstallment = async (clientId: string, purchaseId: string, installmentId: string, paymentMethod: Installment['paymentMethod']) => {
     const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
     const purchaseRef = doc(db, purchasePath, purchaseId);
     
-    await runTransaction(db, async (transaction) => {
+    runTransaction(db, async (transaction) => {
         const purchaseSnap = await transaction.get(purchaseRef);
         if (!purchaseSnap.exists()) throw new Error("Purchase not found");
         
@@ -275,21 +284,25 @@ export const payInstallment = async (clientId: string, purchaseId: string, insta
             }
             return inst;
         });
+        
+        const paymentData = {
+            clientId,
+            purchaseId,
+            amount: paidAmount,
+            date: new Date().toISOString(),
+            installmentId: installmentId,
+            paymentMethod: paymentMethod
+        };
 
         if(isUpdated) {
             transaction.update(purchaseRef, { installments: updatedInstallments });
             const paymentPath = `${getScopedPath()}/clients/${clientId}/payments`;
             const paymentRef = doc(collection(db, paymentPath));
-            transaction.set(paymentRef, {
-                id: paymentRef.id,
-                clientId,
-                purchaseId,
-                amount: paidAmount,
-                date: new Date().toISOString(),
-                installmentId: installmentId,
-                paymentMethod: paymentMethod
-            });
+            transaction.set(paymentRef, { ...paymentData, id: paymentRef.id });
         }
+    }).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: purchaseRef.path, operation: 'update' }));
+        throw error;
     });
 };
 
@@ -297,7 +310,7 @@ export const cancelInstallment = async (clientId: string, purchaseId: string, in
     const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
     const purchaseRef = doc(db, purchasePath, purchaseId);
 
-    await runTransaction(db, async (transaction) => {
+    runTransaction(db, async (transaction) => {
         const purchaseSnap = await transaction.get(purchaseRef);
         if (!purchaseSnap.exists()) throw new Error("Purchase not found");
 
@@ -308,7 +321,6 @@ export const cancelInstallment = async (clientId: string, purchaseId: string, in
             throw new Error("Installment not found.");
         }
 
-        // If the installment was paid, find and delete the corresponding payment transaction
         if (installmentToCancel.status === 'paid') {
             const paymentQuery = query(
                 collection(db, `${getScopedPath()}/clients/${clientId}/payments`),
@@ -320,25 +332,19 @@ export const cancelInstallment = async (clientId: string, purchaseId: string, in
             });
         }
 
-        // Remove the installment
         let remainingInstallments = purchase.installments.filter(inst => inst.id !== installmentId);
 
-        // Renumber remaining installments
         remainingInstallments = remainingInstallments.map((inst, index) => ({
             ...inst,
             installmentNumber: index + 1
         }));
 
-        // Recalculate total value
         const newTotalValue = remainingInstallments.reduce((sum, inst) => sum + inst.value, 0);
 
-        // If there are no installments left, delete the purchase and restore stock
         if (remainingInstallments.length === 0) {
             transaction.delete(purchaseRef);
-            // Restore stock since the entire purchase is cancelled
             await restoreProductStock(purchase.item, purchase.quantity, purchase.id, transaction);
 
-            // Also delete any associated payment if it was an initial single-payment purchase without a specific installmentId
             const initialPaymentQuery = query(collection(db, `${getScopedPath()}/clients/${clientId}/payments`), where("purchaseId", "==", purchaseId));
             const initialPaymentSnap = await getDocs(initialPaymentQuery);
             initialPaymentSnap.forEach(paymentDoc => {
@@ -352,12 +358,12 @@ export const cancelInstallment = async (clientId: string, purchaseId: string, in
                 installments: remainingInstallments,
                 totalValue: newTotalValue
             });
-             // We don't restore stock here as the purchase is still active, just with fewer installments.
-             // Business logic decision: cancelling one installment doesn't mean product return.
         }
+    }).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: purchaseRef.path, operation: 'update' }));
+        throw error;
     });
 };
-
 
 export const addRelative = async (clientId: string, data: AddRelativeFormValues) => {
     const clientRef = doc(clientsCollection(), clientId);
@@ -366,18 +372,25 @@ export const addRelative = async (clientId: string, data: AddRelativeFormValues)
 
     const relativePath = `${getScopedPath()}/clients/${clientId}/relatives`;
     const relativeRef = doc(collection(db, relativePath));
-    await setDoc(relativeRef, {
+    const relativeData = {
         id: relativeRef.id,
         clientId: clientId,
         clientName: clientSnap.data().name,
         ...data,
+    };
+    await setDoc(relativeRef, relativeData).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: relativeRef.path, operation: 'create', requestResourceData: relativeData }));
+        throw error;
     });
 };
 
 // ====== Product Functions ======
 
 export const getProducts = async (): Promise<Product[]> => {
-    const snapshot = await getDocs(productsCollection());
+    const snapshot = await getDocs(productsCollection()).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: getScopedPath() + '/products', operation: 'list'}));
+        throw error;
+    });
     const products: Product[] = await Promise.all(snapshot.docs.map(async (doc) => {
         const productData = { id: doc.id, ...doc.data() } as Omit<Product, 'history'>;
         const historyPath = `${getScopedPath()}/products/${doc.id}/history`;
@@ -393,27 +406,30 @@ export const getProducts = async (): Promise<Product[]> => {
 export const addProduct = async (data: AddProductFormValues) => {
     const { name, quantity, unitPrice, type } = data;
     
-    await runTransaction(db, async (transaction) => {
+    runTransaction(db, async (transaction) => {
         const q = query(productsCollection(), where("name", "==", name));
-        const querySnapshot = await getDocs(q); // Use getDocs within transaction for reads
+        const querySnapshot = await getDocs(q);
         let productRef;
         let currentQuantity = 0;
+        let productData = {};
 
         if (querySnapshot.empty) {
             if (type === 'sale') {
                 throw new Error("Cannot sell a product that doesn't exist.");
             }
             productRef = doc(productsCollection());
-            transaction.set(productRef, {
+            productData = {
                 id: productRef.id,
                 name,
                 quantity: 0, 
                 createdAt: new Date().toISOString()
-            });
+            };
+            transaction.set(productRef, productData);
         } else {
             productRef = querySnapshot.docs[0].ref;
-            const productData = querySnapshot.docs[0].data();
-            currentQuantity = productData.quantity || 0;
+            const existingData = querySnapshot.docs[0].data();
+            currentQuantity = existingData.quantity || 0;
+            productData = existingData;
         }
 
         const newQuantity = type === 'purchase' ? currentQuantity + quantity : currentQuantity - quantity;
@@ -430,20 +446,22 @@ export const addProduct = async (data: AddProductFormValues) => {
             notes: type === 'purchase' ? 'Compra de estoque' : 'Venda manual',
         };
         transaction.set(historyRef, { ...newHistoryEntry, id: historyRef.id });
+    }).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: getScopedPath() + '/products', operation: 'write', requestResourceData: data }));
+        throw error;
     });
 };
 
-
-export const updateProductStock = async (productName: string, quantitySold: number, clientName: string, unitPrice: number, clientId: string, transaction: any, purchaseId: string) => {
+export const updateProductStock = async (productName: string, quantitySold: number, clientName: string, unitPrice: number, clientId: string, transaction: Transaction, purchaseId: string) => {
     const productsQuery = query(productsCollection(), where("name", "==", productName));
-    const productSnapshot = (await getDocs(productsQuery)).docs; // This should be a transactional get if called inside a transaction
+    const productSnapshot = await getDocs(productsQuery);
     
-    if (productSnapshot.length === 0) {
+    if (productSnapshot.empty) {
         console.warn(`Produto "${productName}" não encontrado no estoque. Venda registrada sem atualização de estoque.`);
         return;
     }
     
-    const productDoc = productSnapshot[0];
+    const productDoc = productSnapshot.docs[0];
     const productRef = productDoc.ref;
     const currentQuantity = productDoc.data().quantity || 0;
     
@@ -463,37 +481,38 @@ export const updateProductStock = async (productName: string, quantitySold: numb
         purchaseId,
     };
     transaction.set(historyRef, { ...newHistoryEntry, id: historyRef.id });
-}
+};
 
-export const restoreProductStock = async (productName: string, quantityToRestore: number, purchaseId: string, transaction: any) => {
+export const restoreProductStock = async (productName: string, quantityToRestore: number, purchaseId: string, transaction: Transaction) => {
     const productsQuery = query(productsCollection(), where("name", "==", productName));
-    const productSnapshot = (await getDocs(productsQuery)).docs;
+    const productSnapshot = await getDocs(productsQuery);
 
-    if (productSnapshot.length === 0) {
+    if (productSnapshot.empty) {
         console.warn(`Produto "${productName}" não encontrado. Não foi possível restaurar o estoque.`);
         return;
     }
 
-    const productDoc = productSnapshot[0];
+    const productDoc = productSnapshot.docs[0];
     const productRef = productDoc.ref;
     const currentQuantity = productDoc.data().quantity || 0;
     const newQuantity = currentQuantity + quantityToRestore;
 
     transaction.update(productRef, { quantity: newQuantity });
 
-    // Remove the sale entry from the product's history
     const historyQuery = query(collection(db, `${getScopedPath()}/products/${productRef.id}/history`), where("purchaseId", "==", purchaseId));
-    const historySnapshot = (await getDocs(historyQuery)).docs;
+    const historySnapshot = await getDocs(historyQuery);
     
     historySnapshot.forEach(docToDelete => {
         transaction.delete(docToDelete.ref);
     });
 };
 
-
 export const editProduct = async (id: string, data: EditProductFormValues) => {
     const productRef = doc(productsCollection(), id);
-    await updateDoc(productRef, { name: data.name });
+    await updateDoc(productRef, { name: data.name }).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: productRef.path, operation: 'update', requestResourceData: data }));
+        throw error;
+    });
 };
 
 export const deleteProduct = async (id: string) => {
@@ -508,12 +527,14 @@ export const deleteProduct = async (id: string) => {
     });
 
     batch.delete(productRef);
-    await batch.commit();
+    await batch.commit().catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: productRef.path, operation: 'delete' }));
+        throw error;
+    });
 };
 
-
 export const cancelProductHistoryEntry = async (productId: string, historyEntryId: string) => {
-    await runTransaction(db, async (transaction) => {
+    runTransaction(db, async (transaction) => {
         const productRef = doc(productsCollection(), productId);
         const historyRef = doc(db, `${getScopedPath()}/products/${productId}/history`, historyEntryId);
 
@@ -527,47 +548,42 @@ export const cancelProductHistoryEntry = async (productId: string, historyEntryI
         const product = productSnap.data() as Product;
         const historyEntry = historySnap.data() as ProductHistoryEntry;
 
-        // 1. Revert stock quantity
         const quantityChange = historyEntry.quantity;
         let newQuantity;
         if (historyEntry.type === 'sale') {
             newQuantity = product.quantity + quantityChange;
-        } else { // purchase
+        } else {
             newQuantity = product.quantity - quantityChange;
         }
         transaction.update(productRef, { quantity: newQuantity });
 
-        // 2. If it was a sale linked to a client purchase, delete the purchase
         if (historyEntry.type === 'sale' && historyEntry.clientId && historyEntry.purchaseId) {
             const purchaseRef = doc(db, `${getScopedPath()}/clients/${historyEntry.clientId}/purchases`, historyEntry.purchaseId);
             const purchaseSnap = await transaction.get(purchaseRef);
             if(purchaseSnap.exists()) {
-                 // Also delete any payments associated with this purchase
                 const paymentsQuery = query(
                     collection(db, `${getScopedPath()}/clients/${historyEntry.clientId}/payments`),
                     where("purchaseId", "==", historyEntry.purchaseId)
                 );
-                // We must read before writing in a transaction.
-                // It's safe to do this as a separate step before the transaction or handle it carefully.
-                // For this implementation, we assume we can get the query snapshot and then delete docs.
                 const paymentsSnapshot = await getDocs(paymentsQuery);
                 paymentsSnapshot.forEach(paymentDoc => {
                     transaction.delete(paymentDoc.ref);
                 });
-
                 transaction.delete(purchaseRef);
             }
         }
         
-        // 3. Delete the history entry itself
         transaction.delete(historyRef);
+    }).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `${getScopedPath()}/products/${productId}`, operation: 'write' }));
+        throw error;
     });
 };
 
 // ====== Debt & Payment Functions for Running Balance ======
 
 export const addDebt = async (clientId: string, productName: string, quantity: number, unitPrice: number) => {
-    await runTransaction(db, async (transaction) => {
+    runTransaction(db, async (transaction) => {
         const clientRef = doc(clientsCollection(), clientId);
         const clientSnap = await transaction.get(clientRef);
         if (!clientSnap.exists()) {
@@ -587,18 +603,20 @@ export const addDebt = async (clientId: string, productName: string, quantity: n
             quantity: quantity,
             totalValue: totalValue,
             date: new Date().toISOString(),
-            installments: [{ // Create a single, simple installment representing the debt
+            installments: [{
                 id: crypto.randomUUID(),
                 installmentNumber: 1,
                 value: totalValue,
-                dueDate: new Date().toISOString(), // Or some other logic
+                dueDate: new Date().toISOString(),
                 status: 'pending',
             }]
         };
         transaction.set(purchaseRef, { ...newPurchase, id: purchaseId });
 
-        // Link to stock
         await updateProductStock(productName, quantity, clientName, unitPrice, clientId, transaction, purchaseId);
+    }).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `${getScopedPath()}/clients/${clientId}/purchases`, operation: 'create', requestResourceData: { productName, quantity, unitPrice} }));
+        throw error;
     });
 };
 
@@ -610,17 +628,23 @@ export const addPaymentToDebt = async (clientId: string, amount: number, payment
         clientId: clientId,
         amount: amount,
         date: new Date().toISOString(),
-        purchaseId: 'pagamento_de_divida', // Special ID to indicate it's a general payment
+        purchaseId: 'pagamento_de_divida',
         paymentMethod: paymentMethod,
     };
-    await setDoc(paymentRef, { ...newPayment, id: paymentRef.id });
+    await setDoc(paymentRef, { ...newPayment, id: paymentRef.id }).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: paymentRef.path, operation: 'create', requestResourceData: newPayment }));
+        throw error;
+    });
 };
 
 // ====== Order Functions ======
 
 export const getOrders = async (): Promise<Order[]> => {
     const q = query(ordersCollection(), where("status", "==", "pending"));
-    const snapshot = await getDocs(q);
+    const snapshot = await getDocs(q).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: getScopedPath() + '/orders', operation: 'list'}));
+        throw error;
+    });
     const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
     return orders.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 };
@@ -632,13 +656,19 @@ export const addOrder = async (data: AddOrderFormValues) => {
         createdAt: new Date().toISOString(),
         status: 'pending',
     };
-    await setDoc(orderRef, { ...newOrder, id: orderRef.id });
+    await setDoc(orderRef, { ...newOrder, id: orderRef.id }).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: orderRef.path, operation: 'create', requestResourceData: newOrder }));
+        throw error;
+    });
 };
 
 export const completeOrder = async (orderId: string) => {
     const orderRef = doc(ordersCollection(), orderId);
-    // We change the status to 'completed' instead of deleting
-    // This allows for a potential future "completed orders" history page.
-    // The getOrders() function only fetches 'pending' ones, so it will disappear from the main list.
-    await updateDoc(orderRef, { status: 'completed' });
+    await updateDoc(orderRef, { status: 'completed' }).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: orderRef.path, operation: 'update', requestResourceData: { status: 'completed' } }));
+        throw error;
+    });
 };
+
+
+    

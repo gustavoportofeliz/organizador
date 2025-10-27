@@ -11,7 +11,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { useAuth, useUser } from '@/firebase';
 import { useEffect, useState } from 'react';
-import { signOut } from 'firebase/auth';
+import { signInAnonymously, signOut } from 'firebase/auth';
+import { useToast } from '@/hooks/use-toast';
 
 export function MainLayout({
   children,
@@ -23,16 +24,24 @@ export function MainLayout({
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
   const [isClient, setIsClient] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     setIsClient(true);
   }, []);
 
   useEffect(() => {
-    if (isClient && !isUserLoading && !user) {
-      router.push('/');
+    if (isClient && !isUserLoading && !user && auth) {
+      signInAnonymously(auth).catch((error) => {
+        console.error('Falha na autenticação anônima:', error);
+        toast({
+            variant: 'destructive',
+            title: 'Falha na autenticação',
+            description: 'Não foi possível iniciar uma sessão segura. Por favor, recarregue a página.',
+        });
+      });
     }
-  }, [user, isUserLoading, router, isClient]);
+  }, [user, isUserLoading, router, isClient, auth, toast]);
 
   const handleLogout = async () => {
     try {

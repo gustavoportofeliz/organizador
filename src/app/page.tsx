@@ -49,13 +49,10 @@ export default function WelcomePage() {
       <Card className="w-full max-w-md shadow-2xl">
         <CardHeader>
           <CardTitle>Bem-vindo ao seu Painel</CardTitle>
-          <CardDescription>Digite qualquer texto abaixo e clique para começar a gerenciar seus clientes.</CardDescription>
+          <CardDescription>Clique no botão abaixo para começar a gerenciar seus clientes.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Input 
-            placeholder="Digite qualquer coisa aqui..."
-            onKeyDown={(e) => e.key === 'Enter' && handleEnter()}
-          />
+            <p className="text-center text-muted-foreground">Acesse sua área de trabalho para organizar suas vendas e clientes.</p>
         </CardContent>
         <CardFooter>
           <Button onClick={handleEnter} className="w-full" disabled={isLoading}>

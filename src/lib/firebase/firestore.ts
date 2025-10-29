@@ -1,4 +1,5 @@
 
+
 import { db, auth } from './firebase'; 
 import {
   collection,
@@ -24,8 +25,6 @@ import type { EditProductFormValues } from '@/components/edit-product-dialog';
 import type { AddRelativeFormValues } from '@/components/add-relative-dialog';
 import type { AddOrderFormValues } from '@/components/add-order-dialog';
 import { addDays } from 'date-fns';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 
 
 const getScopedPath = () => {
@@ -52,15 +51,15 @@ const getClientSubcollections = async (clientId: string) => {
 
     const [purchasesSnap, paymentsSnap, relativesSnap] = await Promise.all([
         getDocs(purchasesRef).catch(error => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: purchasesRef.path, operation: 'list'}));
+            console.error("Firebase permission error:", error);
             throw error;
         }),
         getDocs(paymentsRef).catch(error => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: paymentsRef.path, operation: 'list'}));
+            console.error("Firebase permission error:", error);
             throw error;
         }),
         getDocs(relativesRef).catch(error => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: relativesRef.path, operation: 'list'}));
+            console.error("Firebase permission error:", error);
             throw error;
         }),
     ]);
@@ -87,7 +86,7 @@ const getClientSubcollections = async (clientId: string) => {
 
 export const getClients = async (): Promise<Client[]> => {
   const snapshot = await getDocs(clientsCollection()).catch(error => {
-    errorEmitter.emit('permission-error', new FirestorePermissionError({ path: clientsCollection().path, operation: 'list'}));
+    console.error("Firebase permission error:", error);
     throw error;
   });
   const clients: Client[] = await Promise.all(snapshot.docs.map(async (doc) => {
@@ -112,7 +111,7 @@ export const getClientTotals = (client: Client) => {
 export const getClient = async (id: string): Promise<Client> => {
     const clientDocRef = doc(clientsCollection(), id);
     const clientDoc = await getDoc(clientDocRef).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: clientDocRef.path, operation: 'get'}));
+        console.error("Firebase permission error:", error);
         throw error;
     });
 
@@ -138,7 +137,7 @@ export const addClient = async (data: AddClientFormValues) => {
     };
 
     await setDoc(clientRef, clientData).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: clientRef.path, operation: 'create', requestResourceData: clientData }));
+        console.error("Firebase permission error:", error);
         throw error;
     });
 
@@ -169,7 +168,7 @@ export const addClient = async (data: AddClientFormValues) => {
 export const editClient = async (id: string, data: EditClientFormValues) => {
   const clientRef = doc(clientsCollection(), id);
   await updateDoc(clientRef, data as { [x: string]: any }).catch(error => {
-    errorEmitter.emit('permission-error', new FirestorePermissionError({ path: clientRef.path, operation: 'update', requestResourceData: data }));
+    console.error("Firebase permission error:", error);
     throw error;
   });
 };
@@ -195,7 +194,7 @@ export const deleteClient = async (id: string) => {
 
     batch.delete(clientRef);
     await batch.commit().catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: clientRef.path, operation: 'delete' }));
+        console.error("Firebase permission error:", error);
         throw error;
     });
 };
@@ -255,7 +254,7 @@ export const payInstallment = async (clientId: string, purchaseId: string, insta
             transaction.set(paymentRef, { ...paymentData, id: paymentRef.id });
         }
     }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: purchaseRef.path, operation: 'update' }));
+        console.error("Firebase permission error:", error);
         throw error;
     });
 };
@@ -316,7 +315,7 @@ export const cancelInstallment = async (clientId: string, purchaseId: string, in
             }
         });
     } catch (error) {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: purchaseRef.path, operation: 'write' }));
+        console.error("Firebase permission error:", error);
         throw error;
     }
 };
@@ -324,7 +323,7 @@ export const cancelInstallment = async (clientId: string, purchaseId: string, in
 export const addRelative = async (clientId: string, data: AddRelativeFormValues) => {
     const clientRef = doc(clientsCollection(), clientId);
     const clientSnap = await getDoc(clientRef).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: clientRef.path, operation: 'get' }));
+        console.error("Firebase permission error:", error);
         throw error;
     });
     if (!clientSnap.exists()) throw new Error("Client not found");
@@ -338,7 +337,7 @@ export const addRelative = async (clientId: string, data: AddRelativeFormValues)
         ...data,
     };
     await setDoc(relativeRef, relativeData).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: relativeRef.path, operation: 'create', requestResourceData: relativeData }));
+        console.error("Firebase permission error:", error);
         throw error;
     });
 };
@@ -347,7 +346,7 @@ export const addRelative = async (clientId: string, data: AddRelativeFormValues)
 
 export const getProducts = async (): Promise<Product[]> => {
     const snapshot = await getDocs(productsCollection()).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: productsCollection().path, operation: 'list'}));
+        console.error("Firebase permission error:", error);
         throw error;
     });
     const products: Product[] = await Promise.all(snapshot.docs.map(async (doc) => {
@@ -406,7 +405,7 @@ export const addProduct = async (data: AddProductFormValues) => {
         };
         transaction.set(historyRef, { ...newHistoryEntry, id: historyRef.id });
     }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: getScopedPath() + '/products', operation: 'write', requestResourceData: data }));
+        console.error("Firebase permission error:", error);
         throw error;
     });
 };
@@ -469,7 +468,7 @@ export const restoreProductStock = async (productName: string, quantityToRestore
 export const editProduct = async (id: string, data: EditProductFormValues) => {
     const productRef = doc(productsCollection(), id);
     await updateDoc(productRef, { name: data.name }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: productRef.path, operation: 'update', requestResourceData: data }));
+        console.error("Firebase permission error:", error);
         throw error;
     });
 };
@@ -487,7 +486,7 @@ export const deleteProduct = async (id: string) => {
 
     batch.delete(productRef);
     await batch.commit().catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: productRef.path, operation: 'delete' }));
+        console.error("Firebase permission error:", error);
         throw error;
     });
 };
@@ -534,7 +533,7 @@ export const cancelProductHistoryEntry = async (productId: string, historyEntryI
         
         transaction.delete(historyRef);
     }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `${getScopedPath()}/products/${productId}/history`, operation: 'delete' }));
+        console.error("Firebase permission error:", error);
         throw error;
     });
 };
@@ -579,7 +578,7 @@ export const addDebt = async (clientId: string, productName: string, quantity: n
         await execute(transaction);
     } else {
         await runTransaction(db, execute).catch(error => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `${getScopedPath()}/clients/${clientId}/purchases`, operation: 'create' }));
+            console.error("Firebase permission error:", error);
             throw error;
         });
     }
@@ -597,7 +596,7 @@ export const addPaymentToDebt = async (clientId: string, amount: number, payment
         paymentMethod: paymentMethod,
     };
     await setDoc(paymentRef, { ...newPayment, id: paymentRef.id }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: paymentRef.path, operation: 'create', requestResourceData: newPayment }));
+        console.error("Firebase permission error:", error);
         throw error;
     });
 };
@@ -607,7 +606,7 @@ export const addPaymentToDebt = async (clientId: string, amount: number, payment
 export const getOrders = async (): Promise<Order[]> => {
     const q = query(ordersCollection(), where("status", "==", "pending"));
     const snapshot = await getDocs(q).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ordersCollection().path, operation: 'list'}));
+        console.error("Firebase permission error:", error);
         throw error;
     });
     const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
@@ -622,7 +621,7 @@ export const addOrder = async (data: AddOrderFormValues) => {
         status: 'pending',
     };
     await setDoc(orderRef, { ...newOrder, id: orderRef.id }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: orderRef.path, operation: 'create', requestResourceData: newOrder }));
+        console.error("Firebase permission error:", error);
         throw error;
     });
 };
@@ -630,7 +629,7 @@ export const addOrder = async (data: AddOrderFormValues) => {
 export const completeOrder = async (orderId: string) => {
     const orderRef = doc(ordersCollection(), orderId);
     await updateDoc(orderRef, { status: 'completed' }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: orderRef.path, operation: 'update', requestResourceData: { status: 'completed' } }));
+        console.error("Firebase permission error:", error);
         throw error;
     });
 };

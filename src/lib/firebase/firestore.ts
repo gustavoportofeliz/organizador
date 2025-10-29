@@ -1,6 +1,7 @@
 
 
 
+
 import { db, auth } from './firebase'; 
 import {
   collection,
@@ -125,36 +126,38 @@ export const getClient = async (id: string): Promise<Client> => {
 };
 
 export const addClient = async (data: AddClientFormValues) => {
-    await runTransaction(db, async (transaction) => {
-        const clientRef = doc(clientsCollection());
-        const clientData = {
-            id: clientRef.id,
-            name: data.name,
-            phone: data.phone || '',
-            birthDate: data.birthDate || '',
-            address: data.address || '',
-            neighborhood: data.neighborhood || '',
-            childrenInfo: data.childrenInfo || '',
-            preferences: data.preferences || '',
-        };
-        transaction.set(clientRef, clientData);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const clientRef = doc(clientsCollection());
+            const clientData = {
+                id: clientRef.id,
+                name: data.name,
+                phone: data.phone || '',
+                birthDate: data.birthDate || '',
+                address: data.address || '',
+                neighborhood: data.neighborhood || '',
+                childrenInfo: data.childrenInfo || '',
+                preferences: data.preferences || '',
+            };
+            transaction.set(clientRef, clientData);
 
-        const hasPurchase = data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem;
-        const hasPayment = data.paymentAmount && data.paymentAmount > 0;
+            const hasPurchase = data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem;
+            const hasPayment = data.paymentAmount && data.paymentAmount > 0;
 
-        if (hasPurchase) {
-            await addDebt(clientRef.id, data.purchaseItem!, 1, data.purchaseValue!, transaction);
+            if (hasPurchase) {
+                await addDebt(clientRef.id, data.purchaseItem!, 1, data.purchaseValue!, transaction);
 
-            if (hasPayment) {
+                if (hasPayment) {
+                    await addPaymentToDebt(clientRef.id, data.paymentAmount!, data.paymentMethod!, transaction);
+                }
+            } else if (hasPayment) {
                 await addPaymentToDebt(clientRef.id, data.paymentAmount!, data.paymentMethod!, transaction);
             }
-        } else if (hasPayment) {
-            await addPaymentToDebt(clientRef.id, data.paymentAmount!, data.paymentMethod!, transaction);
-        }
-    }).catch(error => {
+        });
+    } catch (error) {
         console.error("Error adding client in transaction:", error);
         throw error;
-    });
+    }
 };
 
 
@@ -193,20 +196,21 @@ export const deleteClient = async (id: string) => {
 };
 
 export const addTransaction = async (clientId: string, data: AddTransactionFormValues) => {
-    await runTransaction(db, async (transaction) => {
-        const clientRef = doc(clientsCollection(), clientId);
-        const clientSnap = await transaction.get(clientRef);
-        if (!clientSnap.exists()) {
-            throw new Error("Client not found");
-        }
-        
-        await addDebt(clientId, data.item, data.quantity, data.unitPrice, transaction);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const clientRef = doc(clientsCollection(), clientId);
+            const clientSnap = await transaction.get(clientRef);
+            if (!clientSnap.exists()) {
+                throw new Error("Client not found");
+            }
+            
+            await addDebt(clientId, data.item, data.quantity, data.unitPrice, transaction);
 
-    }).catch(error => {
-        // Since addDebt handles its own error, we can just rethrow or log here
+        });
+    } catch (error) {
         console.error("Add transaction failed:", error);
         throw error;
-    });
+    }
 };
 
 export const payInstallment = async (clientId: string, purchaseId: string, installmentId: string, paymentMethod: Installment['paymentMethod']) => {
@@ -338,7 +342,7 @@ export const addRelative = async (clientId: string, data: AddRelativeFormValues)
 
 export const getProducts = async (): Promise<Product[]> => {
     const snapshot = await getDocs(productsCollection()).catch(error => {
-        console.error("Firebase permission error:", error);
+        console.error(new Error("Firebase permission error in getProducts", { cause: error }));
         throw error;
     });
     const products: Product[] = await Promise.all(snapshot.docs.map(async (doc) => {
@@ -634,3 +638,6 @@ export const completeOrder = async (orderId: string) => {
     });
 };
 
+
+
+    

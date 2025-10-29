@@ -1,5 +1,6 @@
 
 
+
 import { db, auth } from './firebase'; 
 import {
   collection,
@@ -124,46 +125,38 @@ export const getClient = async (id: string): Promise<Client> => {
 };
 
 export const addClient = async (data: AddClientFormValues) => {
-    const clientRef = doc(clientsCollection());
-    const clientData = {
-        id: clientRef.id,
-        name: data.name,
-        phone: data.phone || '',
-        birthDate: data.birthDate || '',
-        address: data.address || '',
-        neighborhood: data.neighborhood || '',
-        childrenInfo: data.childrenInfo || '',
-        preferences: data.preferences || '',
-    };
+    await runTransaction(db, async (transaction) => {
+        const clientRef = doc(clientsCollection());
+        const clientData = {
+            id: clientRef.id,
+            name: data.name,
+            phone: data.phone || '',
+            birthDate: data.birthDate || '',
+            address: data.address || '',
+            neighborhood: data.neighborhood || '',
+            childrenInfo: data.childrenInfo || '',
+            preferences: data.preferences || '',
+        };
+        transaction.set(clientRef, clientData);
 
-    await setDoc(clientRef, clientData).catch(error => {
-        console.error("Firebase permission error:", error);
+        const hasPurchase = data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem;
+        const hasPayment = data.paymentAmount && data.paymentAmount > 0;
+
+        if (hasPurchase) {
+            await addDebt(clientRef.id, data.purchaseItem!, 1, data.purchaseValue!, transaction);
+
+            if (hasPayment) {
+                await addPaymentToDebt(clientRef.id, data.paymentAmount!, data.paymentMethod!, transaction);
+            }
+        } else if (hasPayment) {
+            await addPaymentToDebt(clientRef.id, data.paymentAmount!, data.paymentMethod!, transaction);
+        }
+    }).catch(error => {
+        console.error("Error adding client in transaction:", error);
         throw error;
     });
-
-    // Create purchase and payment if they exist
-    const hasPurchase = data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem;
-    const hasPayment = data.paymentAmount && data.paymentAmount > 0;
-
-    if (hasPurchase) {
-        await addDebt(clientRef.id, data.purchaseItem!, 1, data.purchaseValue!).catch(error => {
-            // Error is handled in addDebt
-            throw error;
-        });
-
-        if (hasPayment) {
-             await addPaymentToDebt(clientRef.id, data.paymentAmount!, data.paymentMethod!).catch(error => {
-                // Error is handled in addPaymentToDebt
-                throw error;
-            });
-        }
-    } else if (hasPayment) { // Payment without a purchase
-        await addPaymentToDebt(clientRef.id, data.paymentAmount!, data.paymentMethod!).catch(error => {
-            // Error is handled in addPaymentToDebt
-            throw error;
-        });
-    }
 };
+
 
 export const editClient = async (id: string, data: EditClientFormValues) => {
   const clientRef = doc(clientsCollection(), id);
@@ -206,7 +199,6 @@ export const addTransaction = async (clientId: string, data: AddTransactionFormV
         if (!clientSnap.exists()) {
             throw new Error("Client not found");
         }
-        const clientName = clientSnap.data()?.name || 'Cliente';
         
         await addDebt(clientId, data.item, data.quantity, data.unitPrice, transaction);
 
@@ -584,21 +576,29 @@ export const addDebt = async (clientId: string, productName: string, quantity: n
     }
 };
 
-export const addPaymentToDebt = async (clientId: string, amount: number, paymentMethod: Payment['paymentMethod']) => {
-    const paymentPath = `${getScopedPath()}/clients/${clientId}/payments`;
-    const paymentRef = doc(collection(db, paymentPath));
+export const addPaymentToDebt = async (clientId: string, amount: number, paymentMethod: Payment['paymentMethod'], transaction?: Transaction) => {
+    const execute = async (trans: Transaction) => {
+        const paymentPath = `${getScopedPath()}/clients/${clientId}/payments`;
+        const paymentRef = doc(collection(db, paymentPath));
 
-    const newPayment: Omit<Payment, 'id'> = {
-        clientId: clientId,
-        amount: amount,
-        date: new Date().toISOString(),
-        purchaseId: 'pagamento_de_divida', // Generic ID for direct payments
-        paymentMethod: paymentMethod,
+        const newPayment: Omit<Payment, 'id'> = {
+            clientId: clientId,
+            amount: amount,
+            date: new Date().toISOString(),
+            purchaseId: 'pagamento_de_divida', // Generic ID for direct payments
+            paymentMethod: paymentMethod,
+        };
+        trans.set(paymentRef, { ...newPayment, id: paymentRef.id });
     };
-    await setDoc(paymentRef, { ...newPayment, id: paymentRef.id }).catch(error => {
-        console.error("Firebase permission error:", error);
-        throw error;
-    });
+
+    if (transaction) {
+        await execute(transaction);
+    } else {
+        await runTransaction(db, execute).catch(error => {
+            console.error("Firebase permission error:", error);
+            throw error;
+        });
+    }
 };
 
 // ====== Order Functions ======
@@ -633,3 +633,4 @@ export const completeOrder = async (orderId: string) => {
         throw error;
     });
 };
+

@@ -147,7 +147,7 @@ export function ClientPage() {
     try {
       await addClient(data);
       toast({ title: 'Sucesso!', description: 'Novo cliente adicionado.', className: 'bg-accent text-accent-foreground' });
-      fetchAllData();
+      await fetchAllData();
     } catch (error) {
       console.error("Error adding client:", error);
     }

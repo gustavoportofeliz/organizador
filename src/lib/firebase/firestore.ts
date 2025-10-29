@@ -2,6 +2,7 @@
 
 
 
+
 import { db, auth } from './firebase'; 
 import {
   collection,
@@ -126,38 +127,33 @@ export const getClient = async (id: string): Promise<Client> => {
 };
 
 export const addClient = async (data: AddClientFormValues) => {
-    try {
-        await runTransaction(db, async (transaction) => {
-            const clientRef = doc(clientsCollection());
-            const clientData = {
-                id: clientRef.id,
-                name: data.name,
-                phone: data.phone || '',
-                birthDate: data.birthDate || '',
-                address: data.address || '',
-                neighborhood: data.neighborhood || '',
-                childrenInfo: data.childrenInfo || '',
-                preferences: data.preferences || '',
-            };
-            transaction.set(clientRef, clientData);
+    await runTransaction(db, async (transaction) => {
+        const clientRef = doc(clientsCollection());
+        const clientData = {
+            id: clientRef.id,
+            name: data.name,
+            phone: data.phone || '',
+            birthDate: data.birthDate || '',
+            address: data.address || '',
+            neighborhood: data.neighborhood || '',
+            childrenInfo: data.childrenInfo || '',
+            preferences: data.preferences || '',
+        };
+        transaction.set(clientRef, clientData);
 
-            const hasPurchase = data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem;
-            const hasPayment = data.paymentAmount && data.paymentAmount > 0;
+        const hasPurchase = data.purchaseValue && data.purchaseValue > 0 && data.purchaseItem;
+        const hasPayment = data.paymentAmount && data.paymentAmount > 0;
 
-            if (hasPurchase) {
-                await addDebt(clientRef.id, data.purchaseItem!, 1, data.purchaseValue!, transaction);
+        if (hasPurchase) {
+            await addDebt(clientRef.id, data.purchaseItem!, 1, data.purchaseValue!, transaction);
 
-                if (hasPayment) {
-                    await addPaymentToDebt(clientRef.id, data.paymentAmount!, data.paymentMethod!, transaction);
-                }
-            } else if (hasPayment) {
+            if (hasPayment) {
                 await addPaymentToDebt(clientRef.id, data.paymentAmount!, data.paymentMethod!, transaction);
             }
-        });
-    } catch (error) {
-        console.error("Error adding client in transaction:", error);
-        throw error;
-    }
+        } else if (hasPayment) {
+            await addPaymentToDebt(clientRef.id, data.paymentAmount!, data.paymentMethod!, transaction);
+        }
+    });
 };
 
 
@@ -196,21 +192,16 @@ export const deleteClient = async (id: string) => {
 };
 
 export const addTransaction = async (clientId: string, data: AddTransactionFormValues) => {
-    try {
-        await runTransaction(db, async (transaction) => {
-            const clientRef = doc(clientsCollection(), clientId);
-            const clientSnap = await transaction.get(clientRef);
-            if (!clientSnap.exists()) {
-                throw new Error("Client not found");
-            }
-            
-            await addDebt(clientId, data.item, data.quantity, data.unitPrice, transaction);
+    await runTransaction(db, async (transaction) => {
+        const clientRef = doc(clientsCollection(), clientId);
+        const clientSnap = await transaction.get(clientRef);
+        if (!clientSnap.exists()) {
+            throw new Error("Client not found");
+        }
+        
+        await addDebt(clientId, data.item, data.quantity, data.unitPrice, transaction);
 
-        });
-    } catch (error) {
-        console.error("Add transaction failed:", error);
-        throw error;
-    }
+    });
 };
 
 export const payInstallment = async (clientId: string, purchaseId: string, installmentId: string, paymentMethod: Installment['paymentMethod']) => {
@@ -341,20 +332,22 @@ export const addRelative = async (clientId: string, data: AddRelativeFormValues)
 // ====== Product Functions ======
 
 export const getProducts = async (): Promise<Product[]> => {
-    const snapshot = await getDocs(productsCollection()).catch(error => {
-        console.error(new Error("Firebase permission error in getProducts", { cause: error }));
-        throw error;
-    });
-    const products: Product[] = await Promise.all(snapshot.docs.map(async (doc) => {
-        const productData = { id: doc.id, ...doc.data() } as Omit<Product, 'history'>;
-        const historyPath = `${getScopedPath()}/products/${doc.id}/history`;
-        const historyRef = collection(db, historyPath);
-        const historySnap = await getDocs(historyRef);
-        const history = historySnap.docs.map(d => ({ id: d.id, ...d.data() } as ProductHistoryEntry))
-                                     .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        return { ...productData, history };
-    }));
-    return products.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    try {
+        const snapshot = await getDocs(productsCollection());
+        const products: Product[] = await Promise.all(snapshot.docs.map(async (doc) => {
+            const productData = { id: doc.id, ...doc.data() } as Omit<Product, 'history'>;
+            const historyPath = `${getScopedPath()}/products/${doc.id}/history`;
+            const historyRef = collection(db, historyPath);
+            const historySnap = await getDocs(historyRef);
+            const history = historySnap.docs.map(d => ({ id: d.id, ...d.data() } as ProductHistoryEntry))
+                                         .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            return { ...productData, history };
+        }));
+        return products.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    } catch (error) {
+        console.error("Error fetching products, returning empty list.", error);
+        return [];
+    }
 };
 
 export const addProduct = async (data: AddProductFormValues) => {

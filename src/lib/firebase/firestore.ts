@@ -264,59 +264,61 @@ export const cancelInstallment = async (clientId: string, purchaseId: string, in
     const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
     const purchaseRef = doc(db, purchasePath, purchaseId);
 
-    await runTransaction(db, async (transaction) => {
-        const purchaseSnap = await transaction.get(purchaseRef);
-        if (!purchaseSnap.exists()) throw new Error("Purchase not found");
+    try {
+        await runTransaction(db, async (transaction) => {
+            const purchaseSnap = await transaction.get(purchaseRef);
+            if (!purchaseSnap.exists()) throw new Error("Purchase not found");
 
-        const purchase = purchaseSnap.data() as Purchase;
-        const installmentToCancel = purchase.installments.find(inst => inst.id === installmentId);
+            const purchase = purchaseSnap.data() as Purchase;
+            const installmentToCancel = purchase.installments.find(inst => inst.id === installmentId);
 
-        if (!installmentToCancel) {
-            throw new Error("Installment not found.");
-        }
+            if (!installmentToCancel) {
+                throw new Error("Installment not found.");
+            }
 
-        if (installmentToCancel.status === 'paid') {
-            const paymentQuery = query(
-                collection(db, `${getScopedPath()}/clients/${clientId}/payments`),
-                where("installmentId", "==", installmentId)
-            );
-            const paymentSnap = await getDocs(paymentQuery);
-            paymentSnap.forEach(paymentDoc => {
-                transaction.delete(paymentDoc.ref);
-            });
-        }
-
-        let remainingInstallments = purchase.installments.filter(inst => inst.id !== installmentId);
-
-        remainingInstallments = remainingInstallments.map((inst, index) => ({
-            ...inst,
-            installmentNumber: index + 1
-        }));
-
-        const newTotalValue = remainingInstallments.reduce((sum, inst) => sum + inst.value, 0);
-
-        if (remainingInstallments.length === 0) {
-            transaction.delete(purchaseRef);
-            await restoreProductStock(purchase.item, purchase.quantity, purchase.id, transaction);
-
-            const initialPaymentQuery = query(collection(db, `${getScopedPath()}/clients/${clientId}/payments`), where("purchaseId", "==", purchaseId));
-            const initialPaymentSnap = await getDocs(initialPaymentQuery);
-            initialPaymentSnap.forEach(paymentDoc => {
-                if (!paymentDoc.data().installmentId) {
+            if (installmentToCancel.status === 'paid') {
+                const paymentQuery = query(
+                    collection(db, `${getScopedPath()}/clients/${clientId}/payments`),
+                    where("installmentId", "==", installmentId)
+                );
+                const paymentSnap = await getDocs(paymentQuery);
+                paymentSnap.forEach(paymentDoc => {
                     transaction.delete(paymentDoc.ref);
-                }
-            });
+                });
+            }
 
-        } else {
-            transaction.update(purchaseRef, {
-                installments: remainingInstallments,
-                totalValue: newTotalValue
-            });
-        }
-    }).catch(error => {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: purchaseRef.path, operation: 'update' }));
+            let remainingInstallments = purchase.installments.filter(inst => inst.id !== installmentId);
+
+            remainingInstallments = remainingInstallments.map((inst, index) => ({
+                ...inst,
+                installmentNumber: index + 1
+            }));
+
+            const newTotalValue = remainingInstallments.reduce((sum, inst) => sum + inst.value, 0);
+
+            if (remainingInstallments.length === 0) {
+                transaction.delete(purchaseRef);
+                await restoreProductStock(purchase.item, purchase.quantity, purchase.id, transaction);
+
+                const initialPaymentQuery = query(collection(db, `${getScopedPath()}/clients/${clientId}/payments`), where("purchaseId", "==", purchaseId));
+                const initialPaymentSnap = await getDocs(initialPaymentQuery);
+                initialPaymentSnap.forEach(paymentDoc => {
+                    if (!paymentDoc.data().installmentId) {
+                        transaction.delete(paymentDoc.ref);
+                    }
+                });
+
+            } else {
+                transaction.update(purchaseRef, {
+                    installments: remainingInstallments,
+                    totalValue: newTotalValue
+                });
+            }
+        });
+    } catch (error) {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: purchaseRef.path, operation: 'write' }));
         throw error;
-    });
+    }
 };
 
 export const addRelative = async (clientId: string, data: AddRelativeFormValues) => {

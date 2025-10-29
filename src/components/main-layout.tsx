@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useAuth, useUser } from '@/firebase';
 import { useEffect, useState } from 'react';
-import { signInAnonymously, signOut } from 'firebase/auth';
+import { signInAnonymously } from 'firebase/auth';
 import { useToast } from '@/hooks/use-toast';
 
 export function MainLayout({
@@ -19,7 +19,6 @@ export function MainLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const router = useRouter();
   const pathname = usePathname();
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
@@ -41,16 +40,7 @@ export function MainLayout({
         });
       });
     }
-  }, [user, isUserLoading, router, isClient, auth, toast]);
-
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      router.push('/');
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
-  };
+  }, [user, isUserLoading, isClient, auth, toast]);
 
   if (isUserLoading || !user) {
     return (
@@ -87,10 +77,6 @@ export function MainLayout({
                   <span>{link.label}</span>
               </Link>
              ))}
-             <Button variant="ghost" size="sm" onClick={handleLogout} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-                  <LogOut className="h-5 w-5" />
-                  <span>Sair</span>
-                </Button>
           </nav>
 
           {/* Mobile Navigation */}
@@ -117,10 +103,6 @@ export function MainLayout({
                         {link.label}
                     </Link>
                  ))}
-                <Button variant="ghost" onClick={handleLogout} className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground justify-start mt-auto">
-                  <LogOut className="h-5 w-5" />
-                  Sair
-                </Button>
               </nav>
             </SheetContent>
           </Sheet>

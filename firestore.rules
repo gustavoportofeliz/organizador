@@ -1,160 +1,124 @@
-/**
- * @fileoverview Firestore Security Rules for the application.
- *
- * Core Philosophy:
- * This ruleset enforces a strict user-ownership model, with data nested under user-specific paths.
- * All data access is controlled by verifying the authenticated user's ID against the document path.
- *
- * Data Structure:
- * - /users/{userId}: Stores user profiles. Only the owner can read/write their own profile.
- * - /users/{userId}/clients/{clientId}: Stores client data for a specific user. Only the owner can manage their clients.
- * - /users/{userId}/clients/{clientId}/purchases/{purchaseId}: Stores purchase history. Only the owner can manage purchases.
- * - /users/{userId}/clients/{clientId}/payments/{paymentId}: Stores payment information. Only the owner can manage payments.
- * - /products/{productId}: Stores product information. Public read access, owner-only writes.
- *
- * Key Security Decisions:
- * - User listing is disallowed.
- * - The /products collection implements a public read, owner-write pattern.
- *
- * Denormalization for Authorization:
- * The data model is structured to avoid `get()` calls in security rules. User ownership is enforced by nesting data under /users/{userId} and using the userId parameter in subcollections.
- */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Checks if the request is made by a signed-in user.
-     * @return {boolean} True if the user is signed in, false otherwise.
-     */
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    /**
-     * @description Checks if the authenticated user ID matches the provided user ID.
-     * @param {string} userId The user ID to compare against.
-     * @return {boolean} True if the user is the owner, false otherwise.
-     */
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    /**
-     * @description Checks if the authenticated user is the owner of an existing document.
-     * @param {string} userId The user ID to compare against.
-     * @return {boolean} True if the user is the owner and the resource exists.
-     */
-    function isExistingOwner(userId) {
-      return isOwner(userId) && resource != null;
-    }
-
-    /**
-     * @description Rules for the /users/{userId} collection.
+     * @description Enforces user-level access control for user profiles.
      * @path /users/{userId}
-     * @allow (create) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can create their own profile.
-     * @deny (create) - User ' другим' cannot create a profile for 'Wl7i6ltAo6Zng0SOY2DC41emBYj1'.
-     * @allow (get) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can get their profile.
-     * @deny (get) - User 'другим' cannot get the profile of 'Wl7i6ltAo6Zng0SOY2DC41emBYj1'.
-     * @allow (update) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can update their own profile.
-     * @deny (update) - User 'другим' cannot update the profile of 'Wl7i6ltAo6Zng0SOY2DC41emBYj1'.
-     * @allow (delete) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can delete their own profile.
-     * @deny (delete) - User 'другим' cannot delete the profile of 'Wl7i6ltAo6Zng0SOY2DC41emBYj1'.
-     * @deny (list) - Listing users is not allowed.
-     * @principle Enforces document ownership for writes, restricts access to a user's own data tree.
+     * @allow (create) - Authenticated user with matching UID can create their own profile.
+     * @allow (get, update, delete) - Authenticated user with matching UID can access and modify their own profile.
+     * @deny (create) - Authenticated user attempts to create a profile with a mismatched UID.
+     * @deny (get, update, delete) - Authenticated user attempts to access or modify another user's profile.
+     * @principle Enforces document ownership for all operations.
      */
     match /users/{userId} {
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow get: if isOwner(userId);
-      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
-      allow delete: if isExistingOwner(userId);
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      allow get: if isSignedIn() && isOwner(userId);
       allow list: if false;
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+      allow delete: if isSignedIn() && isOwner(userId);
     }
 
     /**
-     * @description Rules for the /users/{userId}/clients/{clientId} collection.
+     * @description Enforces user-level access control for client data.
      * @path /users/{userId}/clients/{clientId}
-     * @allow (create) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can create a client under their user ID.
-     * @deny (create) - User 'другим' cannot create a client under the user ID 'Wl7i6ltAo6Zng0SOY2DC41emBYj1'.
-     * @allow (get) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can get a client under their user ID.
-     * @deny (get) - User 'другим' cannot get a client under the user ID 'Wl7i6ltAo6Zng0SOY2DC41emBYj1'.
-     * @allow (update) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can update a client under their user ID.
-     * @deny (update) - User 'другим' cannot update a client under the user ID 'Wl7i6ltAo6Zng0SOY2DC41emBYj1'.
-     * @allow (delete) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can delete a client under their user ID.
-     * @deny (delete) - User 'другим' cannot delete a client under the user ID 'Wl7i6ltAo6Zng0SOY2DC41emBYj1'.
-     * @allow (list) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can list clients under their user ID.
-     * @principle Enforces document ownership for writes, restricts access to a user's own data tree.
+     * @allow (create, get, update, delete, list) - Authenticated user with matching UID can manage their own clients.
+     * @deny (create, get, update, delete, list) - Authenticated user attempts to access another user's clients.
+     * @principle Enforces document ownership for all operations.
      */
     match /users/{userId}/clients/{clientId} {
-      allow create: if isOwner(userId) && request.resource.data.userId == userId;
-      allow get: if isOwner(userId);
-      allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
-      allow delete: if isExistingOwner(userId);
-      allow list: if isOwner(userId);
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      allow get: if isSignedIn() && isOwner(userId);
+      allow list: if isSignedIn() && isOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+      allow delete: if isSignedIn() && isOwner(userId);
     }
 
     /**
-     * @description Rules for the /users/{userId}/clients/{clientId}/purchases/{purchaseId} collection.
+     * @description Enforces user-level access control for purchase data.
      * @path /users/{userId}/clients/{clientId}/purchases/{purchaseId}
-     * @allow (create) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can create a purchase under their client.
-     * @deny (create) - User 'другим' cannot create a purchase under the user ID 'Wl7i6ltAo6Zng0SOY2DC41emBYj1'.
-     * @allow (get) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can get a purchase under their client.
-     * @deny (get) - User 'другим' cannot get a purchase under the user ID 'Wl7i6ltAo6Zng0SOY2DC41emBYj1'.
-     * @allow (update) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can update a purchase under their client.
-     * @deny (update) - User 'другим' cannot update a purchase under the user ID 'Wl7i6ltAo6Zng0SOY2DC41emBYj1'.
-     * @allow (delete) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can delete a purchase under their client.
-     * @deny (delete) - User 'другим' cannot delete a purchase under the user ID 'Wl7i6ltAo6Zng0SOY2DC41emBYj1'.
-     * @allow (list) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can list purchases under their client.
-     * @principle Enforces document ownership for writes, restricts access to a user's own data tree.
+     * @allow (create, get, update, delete, list) - Authenticated user with matching UID can manage their own client's purchases.
+     * @deny (create, get, update, delete, list) - Authenticated user attempts to access another user's client's purchases.
+     * @principle Enforces document ownership for all operations.
      */
     match /users/{userId}/clients/{clientId}/purchases/{purchaseId} {
-      allow create: if isOwner(userId);
-      allow get: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-      allow list: if isOwner(userId);
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      allow get: if isSignedIn() && isOwner(userId);
+      allow list: if isSignedIn() && isOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+      allow delete: if isSignedIn() && isOwner(userId);
     }
 
     /**
-     * @description Rules for the /users/{userId}/clients/{clientId}/payments/{paymentId} collection.
+     * @description Enforces user-level access control for payment data.
      * @path /users/{userId}/clients/{clientId}/payments/{paymentId}
-     * @allow (create) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can create a payment under their client.
-     * @deny (create) - User 'другим' cannot create a payment under the user ID 'Wl7i6ltAo6Zng0SOY2DC41emBYj1'.
-     * @allow (get) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can get a payment under their client.
-     * @deny (get) - User 'другим' cannot get a payment under the user ID 'Wl7i6ltAo6Zng0SOY2DC41emBYj1'.
-     * @allow (update) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can update a payment under their client.
-     * @deny (update) - User 'другим' cannot update a payment under the user ID 'Wl7i6ltAo6Zng0SOY2DC41emBYj1'.
-     * @allow (delete) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can delete a payment under their client.
-     * @deny (delete) - User 'другим' cannot delete a payment under the user ID 'Wl7i6ltAo6Zng0SOY2DC41emBYj1'.
-     * @allow (list) - User 'Wl7i6ltAo6Zng0SOY2DC41emBYj1' can list payments under their client.
-     * @principle Enforces document ownership for writes, restricts access to a user's own data tree.
+     * @allow (create, get, update, delete, list) - Authenticated user with matching UID can manage their own client's payments.
+     * @deny (create, get, update, delete, list) - Authenticated user attempts to access another user's client's payments.
+     * @principle Enforces document ownership for all operations.
      */
     match /users/{userId}/clients/{clientId}/payments/{paymentId} {
-      allow create: if isOwner(userId);
-      allow get: if isOwner(userId);
-      allow update: if isExistingOwner(userId);
-      allow delete: if isExistingOwner(userId);
-      allow list: if isOwner(userId);
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      allow get: if isSignedIn() && isOwner(userId);
+      allow list: if isSignedIn() && isOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && isOwner(userId);
+      allow delete: if isSignedIn() && isOwner(userId);
     }
 
     /**
-     * @description Rules for the /products/{productId} collection.
+     * @description Allows public read access to product data, but restricts write access to owners.
      * @path /products/{productId}
-     * @allow (create) - Requires 'ownerId' field in request data to match authenticated user ID.
-     * @deny (create) - Rejects create if the user is not authenticated.
-     * @allow (get) - Allows any user to get product information.
-     * @allow (list) - Allows any user to list product information.
-     * @allow (update) - Requires authentication and checks if the user is the owner of the product.
-     * @deny (update) - Rejects update if the user is not the owner.
-     * @allow (delete) - Requires authentication and checks if the user is the owner of the product.
-     * @deny (delete) - Rejects delete if the user is not the owner.
-     * @principle Public read access with owner-only writes.
+     * @allow (get, list) - Any user can read product information.
+     * @allow (create) - Authenticated user can create a product with their UID as the ownerId.
+     * @allow (update, delete) - Authenticated user with matching UID can update/delete their own product.
+     * @deny (create, update, delete) - Unauthorized user attempts to create, update, or delete product data.
+     * @principle Public read, owner-only writes with ownership field validation.
      */
     match /products/{productId} {
-        allow get, list: if true;
-        allow create: if isSignedIn() && request.resource.data.id == request.auth.uid;
-        allow update: if isSignedIn() && resource.data.id == request.auth.uid && resource != null;
-        allow delete: if isSignedIn() && resource.data.id == request.auth.uid && resource != null;
+      function isSignedIn() {
+        return request.auth != null;
+      }
+
+      function isOwner(ownerId) {
+        return isSignedIn() && request.auth.uid == ownerId;
+      }
+
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn() && request.data.ownerId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
     }
   }
 }

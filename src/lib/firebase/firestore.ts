@@ -23,6 +23,8 @@ import type { EditProductFormValues } from '@/components/edit-product-dialog';
 import type { AddRelativeFormValues } from '@/components/add-relative-dialog';
 import type { AddOrderFormValues } from '@/components/add-order-dialog';
 import { addDays } from 'date-fns';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 
 const getScopedPath = () => {
@@ -122,7 +124,7 @@ export const getClient = async (id: string): Promise<Client> => {
 };
 
 export const addClient = async (data: AddClientFormValues) => {
-    await runTransaction(db, async (transaction) => {
+    return await runTransaction(db, async (transaction) => {
         const clientRef = doc(clientsCollection());
         const clientData = {
             id: clientRef.id,
@@ -236,7 +238,7 @@ export const payInstallment = async (clientId: string, purchaseId: string, insta
             transaction.set(paymentRef, { ...paymentData, id: paymentRef.id });
         }
     }).catch(error => {
-        console.error("Firebase permission error in payInstallment:", error);
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: purchaseRef.path, operation: 'write', requestResourceData: { installments: '...' } }));
         throw error;
     });
 };
@@ -245,61 +247,59 @@ export const cancelInstallment = async (clientId: string, purchaseId: string, in
     const purchasePath = `${getScopedPath()}/clients/${clientId}/purchases`;
     const purchaseRef = doc(db, purchasePath, purchaseId);
 
-    try {
-        await runTransaction(db, async (transaction) => {
-            const purchaseSnap = await transaction.get(purchaseRef);
-            if (!purchaseSnap.exists()) throw new Error("Purchase not found");
+    await runTransaction(db, async (transaction) => {
+        const purchaseSnap = await transaction.get(purchaseRef);
+        if (!purchaseSnap.exists()) throw new Error("Purchase not found");
 
-            const purchase = purchaseSnap.data() as Purchase;
-            const installmentToCancel = purchase.installments.find(inst => inst.id === installmentId);
+        const purchase = purchaseSnap.data() as Purchase;
+        const installmentToCancel = purchase.installments.find(inst => inst.id === installmentId);
 
-            if (!installmentToCancel) {
-                throw new Error("Installment not found.");
-            }
+        if (!installmentToCancel) {
+            throw new Error("Installment not found.");
+        }
 
-            if (installmentToCancel.status === 'paid') {
-                const paymentQuery = query(
-                    collection(db, `${getScopedPath()}/clients/${clientId}/payments`),
-                    where("installmentId", "==", installmentId)
-                );
-                const paymentSnap = await getDocs(paymentQuery);
-                paymentSnap.forEach(paymentDoc => {
+        if (installmentToCancel.status === 'paid') {
+            const paymentQuery = query(
+                collection(db, `${getScopedPath()}/clients/${clientId}/payments`),
+                where("installmentId", "==", installmentId)
+            );
+            const paymentSnap = await getDocs(paymentQuery);
+            paymentSnap.forEach(paymentDoc => {
+                transaction.delete(paymentDoc.ref);
+            });
+        }
+
+        let remainingInstallments = purchase.installments.filter(inst => inst.id !== installmentId);
+
+        remainingInstallments = remainingInstallments.map((inst, index) => ({
+            ...inst,
+            installmentNumber: index + 1
+        }));
+
+        const newTotalValue = remainingInstallments.reduce((sum, inst) => sum + inst.value, 0);
+
+        if (remainingInstallments.length === 0) {
+            transaction.delete(purchaseRef);
+            await restoreProductStock(purchase.item, purchase.quantity, purchase.id, transaction);
+
+            const initialPaymentQuery = query(collection(db, `${getScopedPath()}/clients/${clientId}/payments`), where("purchaseId", "==", purchaseId));
+            const initialPaymentSnap = await getDocs(initialPaymentQuery);
+            initialPaymentSnap.forEach(paymentDoc => {
+                if (!paymentDoc.data().installmentId) {
                     transaction.delete(paymentDoc.ref);
-                });
-            }
+                }
+            });
 
-            let remainingInstallments = purchase.installments.filter(inst => inst.id !== installmentId);
-
-            remainingInstallments = remainingInstallments.map((inst, index) => ({
-                ...inst,
-                installmentNumber: index + 1
-            }));
-
-            const newTotalValue = remainingInstallments.reduce((sum, inst) => sum + inst.value, 0);
-
-            if (remainingInstallments.length === 0) {
-                transaction.delete(purchaseRef);
-                await restoreProductStock(purchase.item, purchase.quantity, purchase.id, transaction);
-
-                const initialPaymentQuery = query(collection(db, `${getScopedPath()}/clients/${clientId}/payments`), where("purchaseId", "==", purchaseId));
-                const initialPaymentSnap = await getDocs(initialPaymentQuery);
-                initialPaymentSnap.forEach(paymentDoc => {
-                    if (!paymentDoc.data().installmentId) {
-                        transaction.delete(paymentDoc.ref);
-                    }
-                });
-
-            } else {
-                transaction.update(purchaseRef, {
-                    installments: remainingInstallments,
-                    totalValue: newTotalValue
-                });
-            }
-        });
-    } catch (error) {
-        console.error("Firebase permission error in cancelInstallment:", error);
+        } else {
+            transaction.update(purchaseRef, {
+                installments: remainingInstallments,
+                totalValue: newTotalValue
+            });
+        }
+    }).catch(error => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: purchaseRef.path, operation: 'write' }));
         throw error;
-    }
+    });
 };
 
 export const addRelative = async (clientId: string, data: AddRelativeFormValues) => {
@@ -340,8 +340,8 @@ export const getProducts = async (): Promise<Product[]> => {
         }));
         return products.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     } catch (error) {
-        console.error("Error fetching products, returning empty list.", error);
-        return [];
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: productsCollection().path, operation: 'list'}));
+        throw error;
     }
 };
 
@@ -389,7 +389,7 @@ export const addProduct = async (data: AddProductFormValues) => {
         };
         transaction.set(historyRef, { ...newHistoryEntry, id: historyRef.id });
     }).catch(error => {
-        console.error("Firebase permission error in addProduct:", error);
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: productsCollection().path, operation: 'write', requestResourceData: data}));
         throw error;
     });
 };
@@ -452,7 +452,7 @@ export const restoreProductStock = async (productName: string, quantityToRestore
 export const editProduct = async (id: string, data: EditProductFormValues) => {
     const productRef = doc(productsCollection(), id);
     await updateDoc(productRef, { name: data.name }).catch(error => {
-        console.error("Firebase permission error in editProduct:", error);
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: productRef.path, operation: 'update', requestResourceData: data }));
         throw error;
     });
 };
@@ -470,7 +470,7 @@ export const deleteProduct = async (id: string) => {
 
     batch.delete(productRef);
     await batch.commit().catch(error => {
-        console.error("Firebase permission error in deleteProduct:", error);
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: productRef.path, operation: 'delete'}));
         throw error;
     });
 };
@@ -517,7 +517,7 @@ export const cancelProductHistoryEntry = async (productId: string, historyEntryI
         
         transaction.delete(historyRef);
     }).catch(error => {
-        console.error("Firebase permission error in cancelProductHistoryEntry:", error);
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: 'batch write', operation: 'write'}));
         throw error;
     });
 };
@@ -562,7 +562,7 @@ export const addDebt = async (clientId: string, productName: string, quantity: n
         await execute(transaction);
     } else {
         await runTransaction(db, execute).catch(error => {
-            console.error("Firebase permission error in addDebt:", error);
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `users/${auth.currentUser?.uid}/clients/${clientId}`, operation: 'write' }));
             throw error;
         });
     }
@@ -587,7 +587,7 @@ export const addPaymentToDebt = async (clientId: string, amount: number, payment
         await execute(transaction);
     } else {
         await runTransaction(db, execute).catch(error => {
-            console.error("Firebase permission error in addPaymentToDebt:", error);
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: `users/${auth.currentUser?.uid}/clients/${clientId}/payments`, operation: 'create', requestResourceData: { amount } }));
             throw error;
         });
     }
@@ -597,10 +597,7 @@ export const addPaymentToDebt = async (clientId: string, amount: number, payment
 
 export const getOrders = async (): Promise<Order[]> => {
     const q = query(ordersCollection(), where("status", "==", "pending"));
-    const snapshot = await getDocs(q).catch(error => {
-        console.error("Firebase permission error in getOrders:", error);
-        throw error;
-    });
+    const snapshot = await getDocs(q);
     const orders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
     return orders.sort((a,b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 };
@@ -613,7 +610,7 @@ export const addOrder = async (data: AddOrderFormValues) => {
         status: 'pending',
     };
     await setDoc(orderRef, { ...newOrder, id: orderRef.id }).catch(error => {
-        console.error("Firebase permission error in addOrder:", error);
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: orderRef.path, operation: 'create', requestResourceData: newOrder }));
         throw error;
     });
 };
@@ -621,7 +618,7 @@ export const addOrder = async (data: AddOrderFormValues) => {
 export const completeOrder = async (orderId: string) => {
     const orderRef = doc(ordersCollection(), orderId);
     await updateDoc(orderRef, { status: 'completed' }).catch(error => {
-        console.error("Firebase permission error in completeOrder:", error);
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: orderRef.path, operation: 'update', requestResourceData: { status: 'completed' }}));
         throw error;
     });
 };

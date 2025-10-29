@@ -2,7 +2,7 @@
 
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Users, Calendar, Archive, DollarSign, PanelLeft, Home, HelpCircle, FileText, ClipboardList, LogOut, Loader2 } from 'lucide-react';
+import { Users, Calendar, Archive, DollarSign, PanelLeft, Home, HelpCircle, FileText, ClipboardList, Loader2 } from 'lucide-react';
 import {
   Sheet,
   SheetContent,

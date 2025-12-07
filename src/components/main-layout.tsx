@@ -2,10 +2,12 @@
 
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Users, Calendar, Archive, DollarSign, PanelLeft, Home, HelpCircle, FileText, ClipboardList, Loader2 } from 'lucide-react';
+import { Users, Calendar, Archive, DollarSign, PanelLeft, Home, HelpCircle, FileText, ClipboardList, Loader2, LogOut } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
+  SheetHeader,
+  SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Button } from '@/components/ui/button';
@@ -92,6 +94,9 @@ export function MainLayout({
               </Button>
             </SheetTrigger>
             <SheetContent side="left">
+               <SheetHeader>
+                <SheetTitle className="sr-only">Menu Principal</SheetTitle>
+              </SheetHeader>
               <nav className="grid gap-6 text-lg font-medium">
                 <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold mb-4">
                      <Users className="w-6 h-6" />
